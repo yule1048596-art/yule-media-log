@@ -157,6 +157,7 @@ function setupThemeToggle() {
     } catch {
       meta.content = target;
     }
+    if (state.dataset?.works?.length) renderAll();
   });
 
   window.addEventListener('storage', (e) => {
@@ -381,6 +382,18 @@ function renderHeroSpotlight() {
     .filter(Boolean)
     .join(' · ');
   const numStr = `${String(idx + 1).padStart(2, '0')} / ${String(pool.length).padStart(2, '0')}`;
+  const dotsHtml = pool.length > 1
+    ? pool
+        .map(
+          (item, i) =>
+            `<button type="button" class="spot-dot" data-spot-goto="${i}" aria-label="精选第 ${i + 1} 部：${escapeHtml(item.title)}"${i === idx ? ' aria-current="true"' : ''}></button>`
+        )
+        .join('')
+    : '';
+  const heroTags = (w.tags || [])
+    .slice(0, 3)
+    .map((t) => `<span class="mini-tag">#${escapeHtml(t)}</span>`)
+    .join('');
 
   spotEl.innerHTML = `<img class="hero-backdrop" referrerpolicy="no-referrer" src="${escapeHtml(coverSrc)}" data-work-id="${escapeHtml(w.id)}" alt="" aria-hidden="true">
     <div class="hero-inner">
@@ -391,16 +404,22 @@ function renderHeroSpotlight() {
         <div class="hero-eyebrow-row">
           <span class="hero-kicker">CURATOR'S SPOTLIGHT · 私藏精选 ${escapeHtml(numStr)}</span>
           ${pool.length > 1 ? `<div class="hero-nav">
+            <div class="spot-dots">${dotsHtml}</div>
             <button type="button" class="spot-nav-btn" data-spot-nav="-1" aria-label="上一部精选">‹</button>
             <button type="button" class="spot-nav-btn" data-spot-nav="1" aria-label="下一部精选">›</button>
           </div>` : ''}
         </div>
-        <h2 class="hero-title">${escapeHtml(w.title)}</h2>
-        <div class="hero-meta">${escapeHtml(metaParts)} · 评分 ★${w.score !== null ? w.score.toFixed(1) : '未评'}</div>
+        <div class="hero-heading-bar">
+          <h2 class="hero-title">${escapeHtml(w.title)}</h2>
+          ${w.originalTitle ? `<span class="hero-orig">${escapeHtml(w.originalTitle)}</span>` : ''}
+          ${w.score !== null ? `<span class="hero-score-seal">${w.score.toFixed(1)}<small>/10</small></span>` : ''}
+        </div>
+        <div class="hero-meta">${escapeHtml(metaParts)}${metaParts ? ' · ' : ''}<span class="status-dot" data-status="${escapeHtml(w.status)}" aria-hidden="true"></span>${escapeHtml(STATUS_LABELS[w.status])}</div>
         ${w.oneLiner ? `<blockquote class="hero-quote">${escapeHtml(w.oneLiner)}</blockquote>` : ''}
         <div class="hero-cta-row">
           <button type="button" class="btn btn-primary" data-open-work="${escapeHtml(w.id)}">展卷详读 →</button>
-          ${w.hallOfFame ? '<span class="stamp-hof">🏛️ 个人殿堂神作</span>' : ''}
+          ${w.hallOfFame ? '<span class="hero-seal-badge">個人殿堂</span>' : ''}
+          ${heroTags ? `<div class="hero-tags">${heroTags}</div>` : ''}
         </div>
       </div>
     </div>`;
@@ -433,7 +452,7 @@ function renderGalleryView(items, worksById) {
         w.progressTotal > 0 && w.progressCurrent !== null
           ? Math.min(100, Math.max(0, Math.round((w.progressCurrent / w.progressTotal) * 100)))
           : null;
-      const meta = [w.creator, w.releaseYear, STATUS_LABELS[w.status]].filter(Boolean).join(' · ');
+      const meta = [w.creator, w.releaseYear].filter(Boolean).join(' · ');
       const tagsHtml = w.tags
         .slice(0, 3)
         .map((t) => `<span class="mini-tag">#${escapeHtml(t)}</span>`)
@@ -453,7 +472,7 @@ function renderGalleryView(items, worksById) {
           </div>
           <div class="card-body">
             <h3 class="card-title">${escapeHtml(w.title)}</h3>
-            <div class="card-meta">${escapeHtml(meta)}</div>
+            <div class="card-meta">${meta ? `${escapeHtml(meta)} · ` : ''}<span class="status-dot" data-status="${escapeHtml(w.status)}" aria-hidden="true"></span>${escapeHtml(STATUS_LABELS[w.status])}</div>
             ${w.oneLiner ? `<p class="card-obi">${escapeHtml(w.oneLiner)}</p>` : ''}
             ${tagsHtml ? `<div class="card-footer-tags">${tagsHtml}</div>` : ''}
           </div>
@@ -500,7 +519,7 @@ function renderHallView(items, worksById) {
             ${w.hallOfFame ? '<span class="stamp-hof" style="margin-inline-start:.3rem">殿堂</span>' : ''}
           </div>
           <h3 class="card-title" style="margin-top:.35rem">${escapeHtml(w.title)}</h3>
-          <div class="card-meta">${escapeHtml([w.creator, w.releaseYear, w.score !== null ? `★ ${w.score.toFixed(1)}` : '未评'].filter(Boolean).join(' · '))}</div>
+          <div class="card-meta">${escapeHtml([w.creator, w.releaseYear].filter(Boolean).join(' · '))}${w.creator || w.releaseYear ? ' · ' : ''}<span class="status-dot" data-status="${escapeHtml(w.status)}" aria-hidden="true"></span>${escapeHtml(STATUS_LABELS[w.status])} · ${w.score !== null ? `★ ${w.score.toFixed(1)}` : '未评'}</div>
           ${w.oneLiner ? `<p class="card-obi" style="margin-top:.55rem;-webkit-line-clamp:3">${escapeHtml(w.oneLiner)}</p>` : ''}
         </div>
       </button>`;
@@ -689,6 +708,21 @@ function switchView(nextView) {
   transition.finished.finally(focusHeading);
 }
 
+function getReaderSequence(workId) {
+  const filtered = getFilteredWorks();
+  return filtered.some((w) => w.id === workId) ? filtered : state.dataset.works;
+}
+
+function stepReaderWork(delta) {
+  if (!state.activeWorkId) return;
+  const seq = getReaderSequence(state.activeWorkId);
+  if (seq.length <= 1) return;
+  const idx = seq.findIndex((w) => w.id === state.activeWorkId);
+  if (idx < 0) return;
+  const nextIdx = ((idx + delta) % seq.length + seq.length) % seq.length;
+  openReader(seq[nextIdx].id);
+}
+
 async function openReader(workId) {
   const work = state.dataset.works.find((w) => w.id === workId);
   if (!work) return;
@@ -697,6 +731,13 @@ async function openReader(workId) {
 
   const delBtn = document.getElementById('btn-reader-delete');
   delBtn.textContent = '删除记录';
+
+  const seq = getReaderSequence(workId);
+  const disableStep = seq.length <= 1;
+  const prevBtn = document.getElementById('btn-reader-prev');
+  const nextBtn = document.getElementById('btn-reader-next');
+  if (prevBtn) prevBtn.disabled = disableStep;
+  if (nextBtn) nextBtn.disabled = disableStep;
 
   const dialog = document.getElementById('reader-dialog');
   document.getElementById('reader-title').textContent = work.title;
@@ -712,26 +753,38 @@ async function openReader(workId) {
     ['最近更新', work.updatedAt]
   ]
     .filter(([, val]) => Boolean(val))
-    .map(([k, val]) => `<li><strong>${escapeHtml(k)}：</strong>${escapeHtml(val)}</li>`)
+    .map(([k, val]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(val)}</dd>`)
     .join('');
+
+  const filledSegs = work.score !== null ? Math.round(work.score) : 0;
+  const meterHtml = Array.from({ length: 10 }, (_, i) => `<span class="score-meter-seg${i < filledSegs ? ' is-filled' : ''}"></span>`).join('');
 
   const tagsHtml = work.tags
     .map((t) => `<button type="button" class="mini-tag" style="border:1px solid var(--border-hairline);cursor:pointer" data-filter-tag="${escapeHtml(t)}">#${escapeHtml(t)}</button>`)
     .join('');
 
   const coverSrc = getCoverSrc(work);
-  document.getElementById('reader-body').innerHTML = `<img class="reader-hero-wash" referrerpolicy="no-referrer" src="${escapeHtml(coverSrc)}" data-work-id="${escapeHtml(work.id)}" alt="" aria-hidden="true">
+  const readerBody = document.getElementById('reader-body');
+  readerBody.innerHTML = `<img class="reader-hero-wash" referrerpolicy="no-referrer" src="${escapeHtml(coverSrc)}" data-work-id="${escapeHtml(work.id)}" alt="" aria-hidden="true">
     <div class="reader-spread">
     <aside class="reader-aside">
       <img class="reader-poster" referrerpolicy="no-referrer" id="reader-poster-img" src="${escapeHtml(coverSrc)}" data-work-id="${escapeHtml(work.id)}" alt="${escapeHtml(work.title)} 封面">
-      <ul class="reader-specs">${specs}</ul>
+      <div class="reader-score-box">
+        <div class="reader-score-main">
+          <span class="reader-score-label">PERSONAL RATING</span>
+          <span class="reader-score-num${work.score === null ? ' is-unrated' : ''}">${work.score !== null ? work.score.toFixed(1) : '暂未评分'}</span>
+        </div>
+        <div class="score-meter" aria-hidden="true">${meterHtml}</div>
+        ${work.hallOfFame ? '<div class="stamp-crest">個人殿堂 · HALL OF FAME</div>' : ''}
+      </div>
+      <dl class="reader-specs">${specs}</dl>
     </aside>
     <article style="min-width:0">
       <h3 class="reader-heading">${escapeHtml(work.title)}</h3>
       ${work.originalTitle ? `<p class="reader-orig">${escapeHtml(work.originalTitle)}</p>` : ''}
       <div class="reader-score-row">
-        <span class="reader-score-num">${work.score !== null ? work.score.toFixed(1) : '暂未评分'}</span>
-        ${work.hallOfFame ? '<span class="stamp-hof">🏛️ 个人殿堂神作</span>' : ''}
+        <span class="mini-tag">${escapeHtml(categoryBadgeLabel(work))}</span>
+        <span class="mini-tag"><span class="status-dot" data-status="${escapeHtml(work.status)}" aria-hidden="true"></span>${escapeHtml(STATUS_LABELS[work.status])}</span>
         ${tagsHtml}
       </div>
       ${work.oneLiner ? `<blockquote class="reader-obi">${escapeHtml(work.oneLiner)}</blockquote>` : ''}
@@ -739,7 +792,8 @@ async function openReader(workId) {
     </article>
   </div>`;
 
-  attachCoverFallback(document.getElementById('reader-body'), new Map([[work.id, work]]));
+  attachCoverFallback(readerBody, new Map([[work.id, work]]));
+  readerBody.scrollTop = 0;
 
   if (!dialog.open) dialog.showModal();
   await safeSetHTML(document.getElementById('reader-prose'), compileMarkdown(work.reviewMd));
@@ -915,10 +969,11 @@ function setupMainAndModalEvents() {
   document.getElementById('btn-toggle-stats').addEventListener('click', (e) => {
     const panel = document.getElementById('stats-panel');
     const btn = e.currentTarget;
+    const lbl = document.getElementById('toggle-stats-label');
     const isCurrentlyOpen = !panel.hidden && !panel.classList.contains('is-collapsing');
     if (isCurrentlyOpen) {
       btn.setAttribute('aria-expanded', 'false');
-      btn.textContent = '📊 展开看板';
+      if (lbl) lbl.textContent = '展开看板';
       panel.classList.add('is-collapsing');
       const transitions = panel.getAnimations().filter((a) => a instanceof CSSTransition);
       if (!transitions.length) {
@@ -934,11 +989,17 @@ function setupMainAndModalEvents() {
       getComputedStyle(panel).blockSize;
       requestAnimationFrame(() => panel.classList.remove('is-collapsing'));
       btn.setAttribute('aria-expanded', 'true');
-      btn.textContent = '📊 隐藏看板';
+      if (lbl) lbl.textContent = '隐藏看板';
     }
   });
 
   document.getElementById('hero-spotlight')?.addEventListener('click', (e) => {
+    const dotBtn = e.target.closest('[data-spot-goto]');
+    if (dotBtn) {
+      state.spotlightIndex = Number(dotBtn.dataset.spotGoto) || 0;
+      renderHeroSpotlight();
+      return;
+    }
     const navBtn = e.target.closest('[data-spot-nav]');
     if (navBtn) {
       state.spotlightIndex += Number(navBtn.dataset.spotNav) || 0;
@@ -1037,6 +1098,9 @@ function setupMainAndModalEvents() {
       });
     }
   });
+
+  document.getElementById('btn-reader-prev')?.addEventListener('click', () => stepReaderWork(-1));
+  document.getElementById('btn-reader-next')?.addEventListener('click', () => stepReaderWork(1));
 
   document.getElementById('btn-reader-edit').addEventListener('click', () => {
     const id = state.activeWorkId;
@@ -1303,14 +1367,27 @@ function setupShortcuts() {
 
   const viewMap = { '1': 'gallery', '2': 'hall', '3': 'timeline', '4': 'table' };
   document.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    const isTyping = active && (/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) || active.isContentEditable);
+    const readerOpen = document.getElementById('reader-dialog')?.open;
+    if (readerOpen && !isTyping && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stepReaderWork(-1);
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        stepReaderWork(1);
+        return;
+      }
+    }
     if (document.querySelector('dialog[open]')) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       document.getElementById('filter-search')?.focus();
       return;
     }
-    const active = document.activeElement;
-    const isTyping = active && (/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) || active.isContentEditable);
     if (isTyping || e.metaKey || e.ctrlKey || e.altKey) return;
 
     if (e.key === '/') {

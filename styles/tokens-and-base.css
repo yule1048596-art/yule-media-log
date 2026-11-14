@@ -4,37 +4,44 @@
   color-scheme: light dark;
   interpolate-size: allow-keywords;
   scroll-padding-top: 5.25rem;
+  scrollbar-gutter: stable;
 
-  --bg-canvas-light: #f5f1e8;
-  --bg-surface-light: #fcf9f2;
-  --bg-elevated-light: #ede6d8;
-  --surface-glass-light: rgb(252 249 242 / 0.84);
-  --ink-primary-light: #1c1917;
-  --ink-secondary-light: #5c544b;
-  --ink-muted-light: #7c7469;
-  --border-hairline-light: #d8cfc0;
-  --accent-seal-light: #c43b28;
-  --accent-indigo-light: #23476e;
+  --bg-canvas-light: #faf6ee;
+  --bg-surface-light: #fffdf8;
+  --bg-elevated-light: #efe8da;
+  --bg-inset-light: #ebe3d3;
+  --surface-glass-light: rgb(255 253 248 / 0.86);
+  --ink-primary-light: #1a1815;
+  --ink-secondary-light: #595148;
+  --ink-muted-light: #746b60;
+  --border-hairline-light: #d6ccba;
+  --accent-seal-light: #bd3928;
+  --accent-indigo-light: #24486e;
   --accent-sage-light: #35634b;
   --accent-amber-light: #9e6514;
+  --accent-gold-light: #9e7123;
+  --shadow-inset-light: inset 0 1px 0 rgb(255 255 255 / 0.72);
   --heat-0-light: #eae2d3;
   --heat-1-light: #c2d1df;
   --heat-2-light: #6d92b6;
-  --heat-3-light: #23476e;
-  --heat-4-light: #c43b28;
+  --heat-3-light: #24486e;
+  --heat-4-light: #bd3928;
 
-  --bg-canvas-dark: #141312;
-  --bg-surface-dark: #1c1a18;
-  --bg-elevated-dark: #25221f;
-  --surface-glass-dark: rgb(28 26 24 / 0.84);
+  --bg-canvas-dark: #141210;
+  --bg-surface-dark: #1c1917;
+  --bg-elevated-dark: #25211d;
+  --bg-inset-dark: #110f0e;
+  --surface-glass-dark: rgb(28 25 23 / 0.86);
   --ink-primary-dark: #ede7dc;
-  --ink-secondary-dark: #b2aa9c;
-  --ink-muted-dark: #8c8478;
-  --border-hairline-dark: #332f2a;
+  --ink-secondary-dark: #b6ae9f;
+  --ink-muted-dark: #8e8679;
+  --border-hairline-dark: #38332d;
   --accent-seal-dark: #e46552;
   --accent-indigo-dark: #7ba6d4;
   --accent-sage-dark: #76b593;
   --accent-amber-dark: #dfa249;
+  --accent-gold-dark: #ddb05c;
+  --shadow-inset-dark: inset 0 1px 0 rgb(255 255 255 / 0.05);
   --heat-0-dark: #24211e;
   --heat-1-dark: #22374c;
   --heat-2-dark: #375c82;
@@ -44,6 +51,7 @@
   --bg-canvas: var(--bg-canvas-light);
   --bg-surface: var(--bg-surface-light);
   --bg-elevated: var(--bg-elevated-light);
+  --bg-inset: var(--bg-inset-light);
   --surface-glass: var(--surface-glass-light);
   --ink-primary: var(--ink-primary-light);
   --ink-secondary: var(--ink-secondary-light);
@@ -53,6 +61,8 @@
   --accent-indigo: var(--accent-indigo-light);
   --accent-sage: var(--accent-sage-light);
   --accent-amber: var(--accent-amber-light);
+  --accent-gold: var(--accent-gold-light);
+  --shadow-inset-hairline: var(--shadow-inset-light);
   --heat-0: var(--heat-0-light);
   --heat-1: var(--heat-1-light);
   --heat-2: var(--heat-2-light);
@@ -63,6 +73,7 @@
     --bg-canvas: var(--bg-canvas-dark);
     --bg-surface: var(--bg-surface-dark);
     --bg-elevated: var(--bg-elevated-dark);
+    --bg-inset: var(--bg-inset-dark);
     --surface-glass: var(--surface-glass-dark);
     --ink-primary: var(--ink-primary-dark);
     --ink-secondary: var(--ink-secondary-dark);
@@ -72,6 +83,8 @@
     --accent-indigo: var(--accent-indigo-dark);
     --accent-sage: var(--accent-sage-dark);
     --accent-amber: var(--accent-amber-dark);
+    --accent-gold: var(--accent-gold-dark);
+    --shadow-inset-hairline: var(--shadow-inset-dark);
     --heat-0: var(--heat-0-dark);
     --heat-1: var(--heat-1-dark);
     --heat-2: var(--heat-2-dark);
@@ -83,6 +96,7 @@
     --bg-canvas: var(--bg-canvas-dark);
     --bg-surface: var(--bg-surface-dark);
     --bg-elevated: var(--bg-elevated-dark);
+    --bg-inset: var(--bg-inset-dark);
     --surface-glass: var(--surface-glass-dark);
     --ink-primary: var(--ink-primary-dark);
     --ink-secondary: var(--ink-secondary-dark);
@@ -92,6 +106,8 @@
     --accent-indigo: var(--accent-indigo-dark);
     --accent-sage: var(--accent-sage-dark);
     --accent-amber: var(--accent-amber-dark);
+    --accent-gold: var(--accent-gold-dark);
+    --shadow-inset-hairline: var(--shadow-inset-dark);
     --heat-0: var(--heat-0-dark);
     --heat-1: var(--heat-1-dark);
     --heat-2: var(--heat-2-dark);
@@ -104,6 +120,7 @@
     --bg-canvas: var(--bg-canvas-light);
     --bg-surface: var(--bg-surface-light);
     --bg-elevated: var(--bg-elevated-light);
+    --bg-inset: var(--bg-inset-light);
     --surface-glass: var(--surface-glass-light);
     --ink-primary: var(--ink-primary-light);
     --ink-secondary: var(--ink-secondary-light);
@@ -113,6 +130,8 @@
     --accent-indigo: var(--accent-indigo-light);
     --accent-sage: var(--accent-sage-light);
     --accent-amber: var(--accent-amber-light);
+    --accent-gold: var(--accent-gold-light);
+    --shadow-inset-hairline: var(--shadow-inset-light);
     --heat-0: var(--heat-0-light);
     --heat-1: var(--heat-1-light);
     --heat-2: var(--heat-2-light);
@@ -124,6 +143,7 @@
     --bg-canvas: light-dark(var(--bg-canvas-light), var(--bg-canvas-dark));
     --bg-surface: light-dark(var(--bg-surface-light), var(--bg-surface-dark));
     --bg-elevated: light-dark(var(--bg-elevated-light), var(--bg-elevated-dark));
+    --bg-inset: light-dark(var(--bg-inset-light), var(--bg-inset-dark));
     --surface-glass: light-dark(var(--surface-glass-light), var(--surface-glass-dark));
     --ink-primary: light-dark(var(--ink-primary-light), var(--ink-primary-dark));
     --ink-secondary: light-dark(var(--ink-secondary-light), var(--ink-secondary-dark));
@@ -133,6 +153,8 @@
     --accent-indigo: light-dark(var(--accent-indigo-light), var(--accent-indigo-dark));
     --accent-sage: light-dark(var(--accent-sage-light), var(--accent-sage-dark));
     --accent-amber: light-dark(var(--accent-amber-light), var(--accent-amber-dark));
+    --accent-gold: light-dark(var(--accent-gold-light), var(--accent-gold-dark));
+    --shadow-inset-hairline: light-dark(var(--shadow-inset-light), var(--shadow-inset-dark));
     --heat-0: light-dark(var(--heat-0-light), var(--heat-0-dark));
     --heat-1: light-dark(var(--heat-1-light), var(--heat-1-dark));
     --heat-2: light-dark(var(--heat-2-light), var(--heat-2-dark));
@@ -141,8 +163,8 @@
   }
 
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "Hiragino Mincho ProN", Georgia, serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-serif: "Noto Serif SC", "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "Hiragino Mincho ProN", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -160,8 +182,7 @@
   );
 
   accent-color: var(--accent-seal);
-  scrollbar-width: thin;
-  scrollbar-color: var(--ink-muted) transparent;
+  scrollbar-color: var(--ink-secondary) transparent;
 }
 
 *,
@@ -223,6 +244,11 @@ textarea {
 a {
   color: var(--accent-indigo);
   text-underline-offset: 3px;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--accent-seal) 20%, transparent);
+  color: var(--ink-primary);
 }
 
 :focus-visible {
@@ -313,13 +339,53 @@ dialog::backdrop {
   }
 }
 
-/* Auto-sizing review textarea with explicit horizontal width */
+/* Auto-sizing review textarea & post-interaction validation */
 textarea.auto-fit-textarea {
   field-sizing: content;
+  resize: vertical;
   height: auto;
   width: 100%;
-  min-block-size: 7lh;
-  max-block-size: 22lh;
+  min-block-size: 7.5rem;
+  max-block-size: 26rem;
+}
+
+input:not([type="range"]):user-invalid,
+textarea:user-invalid,
+select:user-invalid {
+  border-color: var(--accent-seal);
+  background-color: color-mix(in srgb, var(--accent-seal) 6%, var(--bg-surface));
+}
+
+@media (forced-colors: active) {
+  :root {
+    --bg-canvas: Canvas;
+    --bg-surface: Canvas;
+    --bg-elevated: Canvas;
+    --bg-inset: Canvas;
+    --ink-primary: CanvasText;
+    --ink-secondary: CanvasText;
+    --ink-muted: GrayText;
+    --border-hairline: CanvasText;
+    --accent-seal: Highlight;
+    --accent-indigo: LinkText;
+  }
+
+  .btn,
+  .pill-btn,
+  .hero-spotlight,
+  .kpi-card,
+  .chart-card,
+  .work-card,
+  .hall-card,
+  .timeline-item,
+  dialog:modal {
+    border: 1px solid CanvasText;
+  }
+
+  .pill-btn[aria-pressed="true"],
+  .btn-primary {
+    border-color: Highlight;
+  }
 }
 
 /* Group & Main Stage View Transitions */

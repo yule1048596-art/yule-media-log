@@ -211,35 +211,66 @@ export async function safeSetHTML(el, html) {
 }
 
 const CATEGORY_PALETTES = {
-  movie: { band: '#23476e', label: '映画 / MOVIE' },
-  jdrama: { band: '#8c3b2b', label: '日劇 / J-DRAMA' },
-  manga: { band: '#2f5e46', label: '漫画 / MANGA' },
-  anime: { band: '#534375', label: '動画 / ANIME' },
-  novel: { band: '#9e6514', label: '小説 / NOVEL' },
-  game: { band: '#3a4956', label: '遊戯 / GAME' }
+  movie: { band: '#24486e', label: '映画 · MOVIE' },
+  jdrama: { band: '#8c3b2b', label: '日劇 · J-DRAMA' },
+  manga: { band: '#2f5e46', label: '漫画 · MANGA' },
+  anime: { band: '#534375', label: '動画 · ANIME' },
+  novel: { band: '#8f5a18', label: '小説 · NOVEL' },
+  game: { band: '#3a4956', label: '遊戯 · GAME' }
 };
+
+function wrapBunkoTitle(title) {
+  const tokens = String(title || '未命名作品').match(/\([^)]{1,12}\)|（[^）]{1,12}）|[A-Za-z0-9.+-]+|./gu) || [];
+  const weightOf = (str) => [...str].reduce((acc, ch) => acc + (/[\u0020-\u007e]/.test(ch) ? 0.58 : 1), 0);
+  const lines = [];
+  let current = '';
+  let curW = 0;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
+    const w = weightOf(tok);
+    if (curW > 0 && curW + w > 7.4) {
+      if (lines.length === 3) {
+        current = current.replace(/[，、。·\s]+$/, '') + '…';
+        lines.push(current);
+        return lines;
+      }
+      lines.push(current.trimEnd());
+      current = tok.trimStart();
+      curW = weightOf(current);
+    } else {
+      current += tok;
+      curW += w;
+    }
+  }
+  if (current.trim()) lines.push(current.trim());
+  return lines.slice(0, 4);
+}
 
 export function buildFallbackCoverDataUrl(work) {
   const palette = CATEGORY_PALETTES[work?.category] || CATEGORY_PALETTES.novel;
   const title = String(work?.title || '未命名作品');
   const creator = String(work?.creator || work?.platform || '余録私蔵');
   const year = work?.releaseYear ? String(work.releaseYear) : 'ARCHIVE';
-  const lines = [];
-  for (let idx = 0; idx < title.length && lines.length < 4; idx += 7) {
-    lines.push(title.slice(idx, idx + 7));
-  }
+  const lines = wrapBunkoTitle(title);
+  const startY = lines.length <= 2 ? 148 : 126;
   const tspans = lines
-    .map((line, idx) => `<tspan x="120" dy="${idx === 0 ? 0 : 28}">${escapeHtml(line)}</tspan>`)
+    .map((line, idx) => `<tspan x="120" dy="${idx === 0 ? 0 : 27}">${escapeHtml(line)}</tspan>`)
     .join('');
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="360" viewBox="0 0 240 360">
-    <rect width="240" height="360" fill="#f5efe3"/>
-    <rect x="12" y="12" width="216" height="336" fill="none" stroke="#c8beab" stroke-width="1.5"/>
-    <rect x="12" y="254" width="216" height="94" fill="${palette.band}"/>
-    <text x="26" y="42" fill="${palette.band}" font-size="11" font-family="monospace" letter-spacing="1.5">${escapeHtml(palette.label)}</text>
-    <text x="120" y="126" text-anchor="middle" fill="#1c1917" font-size="21" font-weight="700" font-family="serif">${tspans}</text>
-    <text x="120" y="294" text-anchor="middle" fill="#fcf9f2" font-size="13" font-family="sans-serif">${escapeHtml(creator.slice(0, 18))}</text>
-    <text x="120" y="322" text-anchor="middle" fill="#e6dccb" font-size="11" font-family="monospace">${escapeHtml(year)}</text>
+    <rect width="240" height="360" fill="#f6f1e6"/>
+    <rect x="10" y="10" width="220" height="340" fill="none" stroke="#c8beab" stroke-width="1.2"/>
+    <rect x="15" y="15" width="210" height="330" fill="none" stroke="#ddd3bf" stroke-width="0.8"/>
+    <polygon points="120,46 124,50 120,54 116,50" fill="#bd3928"/>
+    <text x="120" y="70" text-anchor="middle" fill="${palette.band}" font-size="10.5" font-weight="600" font-family="monospace" letter-spacing="1.6">${escapeHtml(palette.label)}</text>
+    <line x1="68" y1="82" x2="172" y2="82" stroke="#d8cfc0" stroke-width="0.9"/>
+    <text x="120" y="${startY}" text-anchor="middle" fill="#1a1815" font-size="19" font-weight="700" font-family="'Noto Serif SC','Songti SC',serif">${tspans}</text>
+    <rect x="15" y="252" width="210" height="93" fill="${palette.band}"/>
+    <line x1="15" y1="252" x2="225" y2="252" stroke="#faf6ee" stroke-width="1" stroke-opacity="0.45"/>
+    <text x="120" y="284" text-anchor="middle" fill="#fcf9f2" font-size="12.5" font-weight="600" font-family="sans-serif">${escapeHtml(creator.slice(0, 18))}</text>
+    <text x="120" y="308" text-anchor="middle" fill="#e8decb" font-size="10.5" font-family="monospace" letter-spacing="1.2">${escapeHtml(year)}</text>
+    <text x="120" y="330" text-anchor="middle" fill="#e8decb" fill-opacity="0.72" font-size="8.5" font-family="monospace" letter-spacing="2">YUROKU BUNKO</text>
   </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

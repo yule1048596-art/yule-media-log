@@ -17,6 +17,33 @@ export const NOVEL_SUBTYPE_LABELS = {
   'general-novel': '一般小说'
 };
 
+const SVG_PALETTES = {
+  light: {
+    indigo: '#24486e',
+    seal: '#bd3928',
+    sub: '#595148',
+    muted: '#746b60',
+    line: '#d6ccba',
+    heat: ['#eae2d3', '#c2d1df', '#6d92b6', '#24486e', '#bd3928']
+  },
+  dark: {
+    indigo: '#7ba6d4',
+    seal: '#e46552',
+    sub: '#b6ae9f',
+    muted: '#8e8679',
+    line: '#38332d',
+    heat: ['#24211e', '#22374c', '#375c82', '#7ba6d4', '#e46552']
+  }
+};
+
+function getSvgPalette() {
+  const scheme = document.querySelector('meta[name="color-scheme"]')?.content;
+  const isDark =
+    scheme === 'dark' ||
+    (scheme !== 'light' && Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
+  return isDark ? SVG_PALETTES.dark : SVG_PALETTES.light;
+}
+
 function computeMean(items) {
   const scored = items.filter((w) => typeof w.score === 'number' && !Number.isNaN(w.score));
   if (!scored.length) return null;
@@ -51,8 +78,11 @@ function renderKpiStrip(container, works) {
 
   container.innerHTML = kpis
     .map(
-      (k) => `<div class="kpi-card">
-        <div class="kpi-label">${escapeHtml(k.label)}</div>
+      (k, idx) => `<div class="kpi-card">
+        <div class="kpi-head">
+          <span class="kpi-label">${escapeHtml(k.label)}</span>
+          <span class="kpi-idx" aria-hidden="true">${String(idx + 1).padStart(2, '0')}</span>
+        </div>
         <div class="kpi-value ${k.cls}">${escapeHtml(k.value)}</div>
         <div class="kpi-sub">${escapeHtml(k.sub)}</div>
       </div>`
@@ -145,6 +175,7 @@ function renderScoreHistogram(container, works) {
     footEl.textContent = 'HISTOGRAM · 朱红区间代表 9.0+ 高赞';
   }
 
+  const pal = getSvgPalette();
   const w = 340;
   const h = 152;
   const barW = 34;
@@ -159,20 +190,20 @@ function renderScoreHistogram(container, works) {
       const barH = count === 0 ? 3 : Math.max(8, Math.round((count / maxCount) * maxBarH));
       const x = leftPad + idx * (barW + gap);
       const y = baseLine - barH;
-      const fillHex = idx >= 5 ? '#c43b28' : '#23476e';
       const fillCls = idx >= 5 ? 'svg-fill-seal' : 'svg-fill-indigo';
+      const fillHex = idx >= 5 ? pal.seal : pal.indigo;
       return `<g>
         <title>${escapeHtml(b.label)} 区间：${count} 部</title>
         <rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="5" fill="${fillHex}" class="${fillCls} hist-bar" style="--bar-idx:${idx}" opacity="${count ? '0.92' : '0.22'}"/>
-        <text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" fill="#5c544b" class="svg-fill-sub" font-size="11" font-family="monospace">${count}</text>
-        <text x="${x + barW / 2}" y="${baseLine + 16}" text-anchor="middle" fill="#7c7469" class="svg-fill-muted" font-size="10.5" font-family="monospace">${escapeHtml(b.label)}</text>
+        <text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" fill="${pal.sub}" class="svg-fill-sub" font-size="11" font-family="monospace">${count}</text>
+        <text x="${x + barW / 2}" y="${baseLine + 16}" text-anchor="middle" fill="${pal.muted}" class="svg-fill-muted" font-size="10.5" font-family="monospace">${escapeHtml(b.label)}</text>
       </g>`;
     })
     .join('');
 
   container.innerHTML = `<div class="svg-box">
     <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="个人评分分布直方图">
-      <line x1="8" y1="${baseLine}" x2="${w - 8}" y2="${baseLine}" stroke="#d8cfc0" class="svg-stroke-line" stroke-width="1"/>
+      <line x1="8" y1="${baseLine}" x2="${w - 8}" y2="${baseLine}" stroke="${pal.line}" class="svg-stroke-line" stroke-width="1"/>
       ${barsSvg}
     </svg>
   </div>`;
@@ -198,6 +229,7 @@ function buildMonthTrendSvg(works, now) {
     months.push({ key, label, count });
   }
 
+  const pal = getSvgPalette();
   const last12Total = months.reduce((acc, m) => acc + m.count, 0);
   const peakMonth = [...months].sort((a, b) => b.count - a.count)[0];
   const maxCount = Math.max(...months.map((m) => m.count), 1);
@@ -209,12 +241,12 @@ function buildMonthTrendSvg(works, now) {
       const barH = m.count === 0 ? 3 : Math.max(7, Math.round((m.count / maxCount) * 44));
       const x = 10 + idx * 29;
       const y = baseLine - barH;
-      const fillHex = m.count ? '#23476e' : '#eae2d3';
       const fillCls = m.count ? 'svg-fill-indigo' : 'svg-heat-0';
+      const fillHex = m.count ? pal.indigo : pal.heat[0];
       return `<g>
         <title>${escapeHtml(m.key)}：完成 ${m.count} 部</title>
         <rect x="${x}" y="${y}" width="18" height="${barH}" rx="4" fill="${fillHex}" class="${fillCls}${m.count ? ' hist-bar' : ''}" style="--bar-idx:${idx}"/>
-        <text x="${x + 9}" y="${baseLine + 14}" text-anchor="middle" fill="#7c7469" class="svg-fill-muted" font-size="9" font-family="monospace">${escapeHtml(m.label)}</text>
+        <text x="${x + 9}" y="${baseLine + 14}" text-anchor="middle" fill="${pal.muted}" class="svg-fill-muted" font-size="9" font-family="monospace">${escapeHtml(m.label)}</text>
       </g>`;
     })
     .join('');
@@ -223,7 +255,7 @@ function buildMonthTrendSvg(works, now) {
     last12Total,
     peakMonth,
     svg: `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="近12个月完成趋势">
-      <line x1="6" y1="${baseLine}" x2="${w - 6}" y2="${baseLine}" stroke="#d8cfc0" class="svg-stroke-line" stroke-width="1"/>
+      <line x1="6" y1="${baseLine}" x2="${w - 6}" y2="${baseLine}" stroke="${pal.line}" class="svg-stroke-line" stroke-width="1"/>
       ${bars}
     </svg>`
   };
@@ -239,11 +271,11 @@ function buildHeatmapSvg(works, now) {
     byDate.set(d, list);
   }
 
+  const pal = getSvgPalette();
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const start = new Date(end);
   start.setDate(end.getDate() - 52 * 7 + (6 - end.getDay()));
 
-  const heatHex = ['#eae2d3', '#c2d1df', '#6d92b6', '#23476e', '#c43b28'];
   const cell = 8;
   const step = 10;
   const cells = [];
@@ -257,7 +289,7 @@ function buildHeatmapSvg(works, now) {
     const level = Math.min(titles.length, 4);
     const tip = titles.length ? `${key}：${titles.join('、')}` : `${key}：无完成记录`;
     cells.push(
-      `<rect x="${week * step}" y="${dow * step}" width="${cell}" height="${cell}" rx="1.5" fill="${heatHex[level]}" class="svg-heat-${level}"><title>${escapeHtml(tip)}</title></rect>`
+      `<rect x="${week * step}" y="${dow * step}" width="${cell}" height="${cell}" rx="1.5" fill="${pal.heat[level]}" class="svg-heat-${level}"><title>${escapeHtml(tip)}</title></rect>`
     );
     if (dow === 6) week += 1;
     cursor.setDate(cursor.getDate() + 1);
