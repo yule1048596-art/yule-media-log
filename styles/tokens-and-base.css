@@ -1,0 +1,242 @@
+/* 余録 · YUROKU — Design Tokens & Base Styles */
+
+:root {
+  color-scheme: light dark;
+
+  --bg-canvas-light: #f5f1e8;
+  --bg-surface-light: #fcf9f2;
+  --bg-elevated-light: #ede6d8;
+  --ink-primary-light: #1c1917;
+  --ink-secondary-light: #5c544b;
+  --ink-muted-light: #7c7469;
+  --border-hairline-light: #d8cfc0;
+  --accent-seal-light: #c43b28;
+  --accent-indigo-light: #23476e;
+  --accent-sage-light: #35634b;
+  --accent-amber-light: #9e6514;
+  --heat-0-light: #eae2d3;
+  --heat-1-light: #c2d1df;
+  --heat-2-light: #6d92b6;
+  --heat-3-light: #23476e;
+  --heat-4-light: #c43b28;
+
+  --bg-canvas-dark: #141312;
+  --bg-surface-dark: #1c1a18;
+  --bg-elevated-dark: #25221f;
+  --ink-primary-dark: #ede7dc;
+  --ink-secondary-dark: #b2aa9c;
+  --ink-muted-dark: #8c8478;
+  --border-hairline-dark: #332f2a;
+  --accent-seal-dark: #e46552;
+  --accent-indigo-dark: #7ba6d4;
+  --accent-sage-dark: #76b593;
+  --accent-amber-dark: #dfa249;
+  --heat-0-dark: #24211e;
+  --heat-1-dark: #22374c;
+  --heat-2-dark: #375c82;
+  --heat-3-dark: #7ba6d4;
+  --heat-4-dark: #e46552;
+
+  --bg-canvas: var(--bg-canvas-light);
+  --bg-surface: var(--bg-surface-light);
+  --bg-elevated: var(--bg-elevated-light);
+  --ink-primary: var(--ink-primary-light);
+  --ink-secondary: var(--ink-secondary-light);
+  --ink-muted: var(--ink-muted-light);
+  --border-hairline: var(--border-hairline-light);
+  --accent-seal: var(--accent-seal-light);
+  --accent-indigo: var(--accent-indigo-light);
+  --accent-sage: var(--accent-sage-light);
+  --accent-amber: var(--accent-amber-light);
+  --heat-0: var(--heat-0-light);
+  --heat-1: var(--heat-1-light);
+  --heat-2: var(--heat-2-light);
+  --heat-3: var(--heat-3-light);
+  --heat-4: var(--heat-4-light);
+
+  @media (prefers-color-scheme: dark) {
+    --bg-canvas: var(--bg-canvas-dark);
+    --bg-surface: var(--bg-surface-dark);
+    --bg-elevated: var(--bg-elevated-dark);
+    --ink-primary: var(--ink-primary-dark);
+    --ink-secondary: var(--ink-secondary-dark);
+    --ink-muted: var(--ink-muted-dark);
+    --border-hairline: var(--border-hairline-dark);
+    --accent-seal: var(--accent-seal-dark);
+    --accent-indigo: var(--accent-indigo-dark);
+    --accent-sage: var(--accent-sage-dark);
+    --accent-amber: var(--accent-amber-dark);
+    --heat-0: var(--heat-0-dark);
+    --heat-1: var(--heat-1-dark);
+    --heat-2: var(--heat-2-dark);
+    --heat-3: var(--heat-3-dark);
+    --heat-4: var(--heat-4-dark);
+  }
+  &:has(> head > meta[name="color-scheme"][content="dark"]) {
+    color-scheme: dark;
+    --bg-canvas: var(--bg-canvas-dark);
+    --bg-surface: var(--bg-surface-dark);
+    --bg-elevated: var(--bg-elevated-dark);
+    --ink-primary: var(--ink-primary-dark);
+    --ink-secondary: var(--ink-secondary-dark);
+    --ink-muted: var(--ink-muted-dark);
+    --border-hairline: var(--border-hairline-dark);
+    --accent-seal: var(--accent-seal-dark);
+    --accent-indigo: var(--accent-indigo-dark);
+    --accent-sage: var(--accent-sage-dark);
+    --accent-amber: var(--accent-amber-dark);
+    --heat-0: var(--heat-0-dark);
+    --heat-1: var(--heat-1-dark);
+    --heat-2: var(--heat-2-dark);
+    --heat-3: var(--heat-3-dark);
+    --heat-4: var(--heat-4-dark);
+  }
+
+  &:has(> head > meta[name="color-scheme"][content="light"]) {
+    color-scheme: light;
+    --bg-canvas: var(--bg-canvas-light);
+    --bg-surface: var(--bg-surface-light);
+    --bg-elevated: var(--bg-elevated-light);
+    --ink-primary: var(--ink-primary-light);
+    --ink-secondary: var(--ink-secondary-light);
+    --ink-muted: var(--ink-muted-light);
+    --border-hairline: var(--border-hairline-light);
+    --accent-seal: var(--accent-seal-light);
+    --accent-indigo: var(--accent-indigo-light);
+    --accent-sage: var(--accent-sage-light);
+    --accent-amber: var(--accent-amber-light);
+    --heat-0: var(--heat-0-light);
+    --heat-1: var(--heat-1-light);
+    --heat-2: var(--heat-2-light);
+    --heat-3: var(--heat-3-light);
+    --heat-4: var(--heat-4-light);
+  }
+
+  @supports (color: light-dark(white, black)) {
+    --bg-canvas: light-dark(var(--bg-canvas-light), var(--bg-canvas-dark));
+    --bg-surface: light-dark(var(--bg-surface-light), var(--bg-surface-dark));
+    --bg-elevated: light-dark(var(--bg-elevated-light), var(--bg-elevated-dark));
+    --ink-primary: light-dark(var(--ink-primary-light), var(--ink-primary-dark));
+    --ink-secondary: light-dark(var(--ink-secondary-light), var(--ink-secondary-dark));
+    --ink-muted: light-dark(var(--ink-muted-light), var(--ink-muted-dark));
+    --border-hairline: light-dark(var(--border-hairline-light), var(--border-hairline-dark));
+    --accent-seal: light-dark(var(--accent-seal-light), var(--accent-seal-dark));
+    --accent-indigo: light-dark(var(--accent-indigo-light), var(--accent-indigo-dark));
+    --accent-sage: light-dark(var(--accent-sage-light), var(--accent-sage-dark));
+    --accent-amber: light-dark(var(--accent-amber-light), var(--accent-amber-dark));
+    --heat-0: light-dark(var(--heat-0-light), var(--heat-0-dark));
+    --heat-1: light-dark(var(--heat-1-light), var(--heat-1-dark));
+    --heat-2: light-dark(var(--heat-2-light), var(--heat-2-dark));
+    --heat-3: light-dark(var(--heat-3-light), var(--heat-3-dark));
+    --heat-4: light-dark(var(--heat-4-light), var(--heat-4-dark));
+  }
+
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "Hiragino Mincho ProN", Georgia, serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-paper: 0 2px 10px rgb(20 18 15 / 0.06);
+  --shadow-modal: 0 20px 50px rgb(10 9 8 / 0.28);
+
+  accent-color: var(--accent-seal);
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-muted) transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink-primary);
+  background-color: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent-indigo);
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+[hidden]:not([hidden="until-found"]) {
+  display: none !important;
+}
+
+/* Modal dialog scroll containment & backdrop (never set display on bare dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  color: var(--ink-primary);
+  box-shadow: var(--shadow-modal);
+  max-inline-size: min(94vw, 960px);
+  max-block-size: min(90dvh, 880px);
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: rgb(15 14 13 / 0.62);
+  backdrop-filter: blur(3px);
+}
+
+/* Auto-sizing review textarea with explicit horizontal width */
+textarea.auto-fit-textarea {
+  field-sizing: content;
+  height: auto;
+  width: 100%;
+  min-block-size: 7lh;
+  max-block-size: 22lh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

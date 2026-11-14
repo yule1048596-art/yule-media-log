@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    try {
+      document.querySelector('meta[name="color-scheme"]').content =
+        localStorage.getItem('color-scheme') ?? 'light dark';
+    } catch {}
+  </script>
+  <title>余録 · YUROKU — 个人书影游评分与批注录</title>
+  <link rel="stylesheet" href="./styles/tokens-and-base.css">
+  <link rel="stylesheet" href="./styles/components.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="brand-block">
+        <div class="brand-seal" aria-hidden="true">余録</div>
+        <div>
+          <h1 class="brand-title" id="site-title">余録 · YUROKU</h1>
+          <p class="brand-subtitle" id="site-subtitle">个人书影游私藏与批注录 · <span id="header-count">0</span> 部收录</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button type="button" class="btn sync-pill" id="btn-open-sync" commandfor="sync-dialog" command="show-modal">
+          <span id="sync-status-dot">●</span> <span id="sync-status-label">已同步</span>
+        </button>
+        <button type="button" class="btn" id="btn-toggle-stats" aria-expanded="true" aria-controls="stats-panel">
+          📊 隐藏看板
+        </button>
+        <button type="button" class="btn btn-icon" id="theme-toggle" aria-label="切换深浅色主题">
+          <span class="theme-icon-light" aria-hidden="true">🌙<span class="visually-hidden">切换深色主题</span></span>
+          <span class="theme-icon-dark" aria-hidden="true">☀️<span class="visually-hidden">切换浅色主题</span></span>
+        </button>
+        <button type="button" class="btn btn-primary" id="btn-new-work">+ 记录作品</button>
+      </div>
+    </header>
+
+    <section id="stats-panel" class="stats-section" aria-label="统计可视化看板">
+      <div id="kpi-strip" class="kpi-strip"></div>
+      <div class="charts-grid">
+        <article class="chart-card">
+          <div class="chart-header">
+            <h2 class="chart-title">六大品类占比与均分</h2>
+            <span class="chart-sub">联动筛选</span>
+          </div>
+          <div id="chart-categories"></div>
+        </article>
+        <article class="chart-card">
+          <div class="chart-header">
+            <h2 class="chart-title">个人评分分布直方图</h2>
+            <span class="chart-sub">0.0 – 10.0 分制</span>
+          </div>
+          <div id="chart-scores"></div>
+        </article>
+        <article class="chart-card">
+          <div class="chart-header">
+            <h2 class="chart-title">近 12 月趋势 &amp; 52 周热力图</h2>
+            <span class="chart-sub">按完成日期统计</span>
+          </div>
+          <div id="chart-activity"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="toolbar-section" aria-label="筛选与视图切换">
+      <div class="category-pills" id="category-pills" role="group" aria-label="品类筛选">
+        <button type="button" class="pill-btn" data-category="all" aria-pressed="true">全部 <span class="pill-count" data-count-for="all">0</span></button>
+        <button type="button" class="pill-btn" data-category="movie" aria-pressed="false">电影 <span class="pill-count" data-count-for="movie">0</span></button>
+        <button type="button" class="pill-btn" data-category="jdrama" aria-pressed="false">日本电视剧 <span class="pill-count" data-count-for="jdrama">0</span></button>
+        <button type="button" class="pill-btn" data-category="manga" aria-pressed="false">日本漫画 <span class="pill-count" data-count-for="manga">0</span></button>
+        <button type="button" class="pill-btn" data-category="anime" aria-pressed="false">动漫 <span class="pill-count" data-count-for="anime">0</span></button>
+        <button type="button" class="pill-btn" data-category="novel" aria-pressed="false">日本小说 <span class="pill-count" data-count-for="novel">0</span></button>
+        <button type="button" class="pill-btn" data-category="game" aria-pressed="false">游戏 <span class="pill-count" data-count-for="game">0</span></button>
+      </div>
+
+      <div class="sub-pills" id="novel-sub-pills" role="group" aria-label="日本小说子分类" hidden>
+        <button type="button" class="pill-btn" data-subtype="all" aria-pressed="true">全部小说</button>
+        <button type="button" class="pill-btn" data-subtype="light-novel" aria-pressed="false">轻小说</button>
+        <button type="button" class="pill-btn" data-subtype="web-novel" aria-pressed="false">网络小说</button>
+        <button type="button" class="pill-btn" data-subtype="general-novel" aria-pressed="false">一般小说</button>
+      </div>
+
+      <div class="filter-controls">
+        <div class="filter-inputs">
+          <input type="search" class="input-control search-input" id="filter-search" placeholder="搜索片名 / 原名 / 作者 / 短评 / 标签…" aria-label="搜索作品">
+          <select class="select-control" id="filter-status" aria-label="状态筛选">
+            <option value="all">全部状态</option>
+            <option value="completed">已完成</option>
+            <option value="watching">在看 / 在玩</option>
+            <option value="planned">想看 / 计划</option>
+            <option value="dropped">搁置 / 弃坑</option>
+          </select>
+          <select class="select-control" id="filter-year" aria-label="完成年份筛选">
+            <option value="all">全部完成年份</option>
+          </select>
+          <button type="button" class="pill-btn" id="filter-hof" aria-pressed="false">殿堂神作</button>
+          <button type="button" class="active-tag-chip" id="active-tag-chip" hidden>
+            标签：<span id="active-tag-text"></span> ✕
+          </button>
+        </div>
+
+        <div class="filter-inputs" style="flex:0 0 auto">
+          <select class="select-control" id="sort-select" aria-label="排序方式">
+            <option value="completedAt-desc">按完成日期（新→旧）</option>
+            <option value="score-desc">按评分（高→低）</option>
+            <option value="score-asc">按评分（低→高）</option>
+            <option value="year-desc">按发行年份（新→旧）</option>
+            <option value="title-asc">按标题（A→Z）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="view-tabs" role="tablist" aria-label="展示视图">
+        <button type="button" role="tab" class="pill-btn view-tab-btn" id="tab-gallery" data-view="gallery" aria-selected="true">🖼️ 海报画廊</button>
+        <button type="button" role="tab" class="pill-btn view-tab-btn" id="tab-hall" data-view="hall" aria-selected="false">🏛️ 个人殿堂</button>
+        <button type="button" role="tab" class="pill-btn view-tab-btn" id="tab-timeline" data-view="timeline" aria-selected="false">⏳ 时间轴</button>
+        <button type="button" role="tab" class="pill-btn view-tab-btn" id="tab-table" data-view="table" aria-selected="false">📋 表格</button>
+      </div>
+    </section>
+
+    <main id="main-content">
+      <div class="view-heading-row">
+        <h2 class="view-heading" id="view-heading" tabindex="-1">海报画廊</h2>
+        <span class="view-meta" id="view-meta">显示 0 部作品</span>
+      </div>
+
+      <section id="gallery-view" aria-labelledby="view-heading">
+        <div id="gallery-grid" class="gallery-grid"></div>
+      </section>
+
+      <section id="hall-view" aria-labelledby="view-heading" hidden>
+        <div id="hall-list" class="hall-list"></div>
+      </section>
+
+      <section id="timeline-view" aria-labelledby="view-heading" hidden>
+        <div id="timeline-groups" class="timeline-groups"></div>
+      </section>
+
+      <section id="table-view" aria-labelledby="view-heading" hidden>
+        <div tabindex="0" role="region" aria-labelledby="works-table-caption" class="table-wrapper">
+          <table id="works-table" class="works-table">
+            <caption id="works-table-caption" class="visually-hidden">全部书影游归档列表</caption>
+            <thead>
+              <tr>
+                <th scope="col" data-type="text"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">作品标题 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-type="text"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">品类 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-type="text"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">状态 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-type="number"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">评分 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-type="number"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">年份 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col" data-type="text"><button type="button" class="sort-btn" commandfor="works-table" command="--sort">完成日期 <span class="sort-indicator" aria-hidden="true"></span></button></th>
+                <th scope="col">进度 / 笔记</th>
+              </tr>
+            </thead>
+            <tbody id="works-tbody"></tbody>
+          </table>
+        </div>
+        <p id="sort-status" role="status" class="visually-hidden"></p>
+      </section>
+    </main>
+  </div>
+
+  <!-- Reader Modal -->
+  <dialog id="reader-dialog" class="modal-dialog" closedby="any" aria-labelledby="reader-title">
+    <div class="modal-header">
+      <h2 class="modal-title" id="reader-title">作品详情</h2>
+      <button type="button" class="btn btn-icon" commandfor="reader-dialog" command="close" aria-label="关闭详情">✕</button>
+    </div>
+    <div class="modal-body" id="reader-body"></div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-danger" id="btn-reader-delete">删除记录</button>
+      <div style="display:flex;gap:.5rem;margin-inline-start:auto">
+        <button type="button" class="btn" id="btn-reader-edit">编辑评分与观后感</button>
+        <button type="button" class="btn btn-primary" commandfor="reader-dialog" command="close">关闭</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Editor Modal -->
+  <dialog id="editor-dialog" class="modal-dialog" closedby="closerequest" aria-labelledby="editor-title">
+    <div class="modal-header">
+      <h2 class="modal-title" id="editor-title">记录作品</h2>
+      <button type="button" class="btn btn-icon" id="btn-editor-x" commandfor="editor-dialog" command="request-close" aria-label="取消并关闭">✕</button>
+    </div>
+    <form id="editor-form" class="modal-body" method="dialog">
+      <div class="lookup-box">
+        <label class="field-label" for="lookup-query">🔍 一键检索自动补全（Bangumi / 维基百科）</label>
+        <div class="lookup-row" style="margin-top:.4rem">
+          <input type="search" class="input-control" style="flex:1 1 200px" id="lookup-query" placeholder="输入作品名，例如：葬送的芙莉莲、告白、非自然死亡…">
+          <select class="select-control" id="lookup-source" aria-label="检索数据源">
+            <option value="bangumi">Bangumi（动漫/漫画/轻小说/游戏/日剧）</option>
+            <option value="wiki">维基百科 zh/ja（小说/电影/网文兜底）</option>
+          </select>
+          <button type="button" class="btn" id="btn-lookup">检索补全</button>
+        </div>
+        <div id="lookup-status" class="field-hint" style="margin-top:.35rem"></div>
+        <div id="lookup-results" class="lookup-results" hidden></div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field-group">
+          <label class="field-label" for="field-title">作品主标题 *</label>
+          <input type="text" class="input-control" id="field-title" required autofocus>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-orig-title">日文 / 外文原名</label>
+          <input type="text" class="input-control" id="field-orig-title">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-category">所属品类 *</label>
+          <select class="select-control" id="field-category" required>
+            <option value="movie">电影</option>
+            <option value="jdrama">日本电视剧</option>
+            <option value="manga">日本漫画</option>
+            <option value="anime">动漫</option>
+            <option value="novel">日本小说</option>
+            <option value="game">游戏</option>
+          </select>
+        </div>
+        <div class="field-group" id="group-subtype" hidden>
+          <label class="field-label" for="field-subtype">小说细分类</label>
+          <select class="select-control" id="field-subtype">
+            <option value="light-novel">轻小说</option>
+            <option value="web-novel">网络小说</option>
+            <option value="general-novel">一般小说</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-status">当前状态</label>
+          <select class="select-control" id="field-status">
+            <option value="completed">已完成</option>
+            <option value="watching">在看 / 在玩</option>
+            <option value="planned">想看 / 计划</option>
+            <option value="dropped">搁置 / 弃坑</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-creator">作者 / 导演 / 监督 / 开发商</label>
+          <input type="text" class="input-control" id="field-creator">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-year">发行年份</label>
+          <input type="number" class="input-control" id="field-year" min="1900" max="2099">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-completed-at">完成 / 看完日期</label>
+          <input type="date" class="input-control" id="field-completed-at">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-platform">平台 / 连载源 / 出版社</label>
+          <input type="text" class="input-control" id="field-platform" placeholder="如 Switch / 小説家になろう / 电击文库">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-progress-text">进度描述</label>
+          <input type="text" class="input-control" id="field-progress-text" placeholder="如 全 28 话 / 第 8 卷 / 42h 通关">
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-progress-cur">进度数值（当前 / 总量）</label>
+          <div style="display:flex;gap:.4rem">
+            <input type="number" class="input-control" style="width:50%" id="field-progress-cur" min="0" placeholder="当前">
+            <input type="number" class="input-control" style="width:50%" id="field-progress-total" min="0" placeholder="总计">
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-cover-url">封面图 HTTPS 链接（留空自动生成文库本封面）</label>
+          <input type="url" class="input-control" id="field-cover-url" placeholder="https://...">
+        </div>
+        <div class="field-group field-span-full">
+          <label class="field-label" for="field-score-num">个人评分（0.0 – 10.0）与殿堂印章</label>
+          <div class="score-input-row">
+            <input type="range" class="score-range" id="field-score-range" min="0" max="10" step="0.1" value="8.5" aria-label="评分滑动条">
+            <input type="number" class="input-control score-num-input" id="field-score-num" min="0" max="10" step="0.1" value="8.5">
+            <label class="checkbox-label"><input type="checkbox" id="field-unrated"> 暂不评分（想看）</label>
+            <label class="checkbox-label"><input type="checkbox" id="field-hof"> 🏛️ 标记为「个人殿堂神作」</label>
+          </div>
+        </div>
+        <div class="field-group field-span-full">
+          <label class="field-label" for="field-tags">标签（逗号或空格分隔）</label>
+          <input type="text" class="input-control" id="field-tags" placeholder="例如：推理, 群像, 叙事诡计">
+        </div>
+        <div class="field-group field-span-full">
+          <label class="field-label" for="field-one-liner">一句话短评（展示于海报腰封）</label>
+          <input type="text" class="input-control" id="field-one-liner" maxlength="140">
+        </div>
+        <div class="field-group field-span-full">
+          <label class="field-label" for="field-review">长篇观后感（支持 Markdown、`||行内剧透||` 与 `:::spoiler 标题 ... :::`）</label>
+          <textarea class="input-control auto-fit-textarea" id="field-review" placeholder="写下你的完整评价、印象最深的片段或剧透思考…"></textarea>
+        </div>
+      </div>
+    </form>
+    <div class="modal-footer">
+      <p id="editor-discard-warn" class="confirm-warn is-hidden" aria-live="polite">尚有未保存修改，再次点击“放弃修改”或按 Esc 将丢弃草稿。</p>
+      <div style="display:flex;gap:.5rem;margin-inline-start:auto">
+        <button type="button" class="btn" id="btn-editor-cancel" commandfor="editor-dialog" command="request-close">取消</button>
+        <button type="submit" form="editor-form" class="btn btn-primary" id="btn-editor-save">保存记录</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Sync & Data Management Modal -->
+  <dialog id="sync-dialog" class="modal-dialog modal-narrow" closedby="any" aria-labelledby="sync-title">
+    <div class="modal-header">
+      <h2 class="modal-title" id="sync-title">数据持久化与 GitHub 同步</h2>
+      <button type="button" class="btn btn-icon" commandfor="sync-dialog" command="close" aria-label="关闭同步面板">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="sync-card">
+        <h3>方式 A · 本地直接写回仓库 JSON</h3>
+        <p class="field-hint">在桌面浏览器中可直接覆写仓库的 <code>data/works.json</code>（不支持 File System Access 时自动触发下载）。</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem">
+          <button type="button" class="btn btn-primary" id="btn-save-local-json">💾 写入本地 works.json</button>
+          <button type="button" class="btn" id="btn-export-json">导出备份 JSON</button>
+          <label class="btn" style="margin:0">
+            导入 JSON <input type="file" id="input-import-json" accept="application/json,.json" class="visually-hidden">
+          </label>
+        </div>
+      </div>
+
+      <div class="sync-card">
+        <h3>方式 B · 在线直连 GitHub 仓库提交</h3>
+        <p class="field-hint">Token 仅保存在本机浏览器的 <code>localStorage</code> 中，不会写入仓库文件或随 JSON 导出。</p>
+        <div class="form-grid" style="margin-top:.6rem">
+          <div class="field-group">
+            <label class="field-label" for="gh-repo">仓库（owner/repo）</label>
+            <input type="text" class="input-control" id="gh-repo" placeholder="例如 yule1048596-art/yule-media-log">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="gh-branch">分支</label>
+            <input type="text" class="input-control" id="gh-branch" value="main">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="gh-path">数据文件路径</label>
+            <input type="text" class="input-control" id="gh-path" value="data/works.json">
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="gh-token">Fine-grained PAT</label>
+            <input type="password" class="input-control" id="gh-token" autocomplete="off" placeholder="github_pat_...">
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem">
+          <button type="button" class="btn btn-primary" id="btn-gh-push">☁️ 推送提交到 GitHub</button>
+          <button type="button" class="btn" id="btn-gh-pull">⬇️ 从 GitHub 拉取最新</button>
+          <button type="button" class="btn" id="btn-gh-save-cfg">保存配置</button>
+        </div>
+        <div id="gh-sync-msg" class="field-hint" style="margin-top:.45rem"></div>
+      </div>
+
+      <div class="sync-card">
+        <h3>示例数据与草稿管理</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+          <button type="button" class="btn" id="btn-clear-demos">🧹 一键清空内置示例数据</button>
+          <button type="button" class="btn btn-danger" id="btn-discard-draft">丢弃本地未同步草稿</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-primary" style="margin-inline-start:auto" commandfor="sync-dialog" command="close">完成</button>
+    </div>
+  </dialog>
+
+  <div id="toast-banner" class="toast-banner" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
