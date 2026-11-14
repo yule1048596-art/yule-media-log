@@ -27,20 +27,26 @@ function computeMean(items) {
 function renderKpiStrip(container, works) {
   const completed = works.filter((w) => w.status === 'completed').length;
   const watching = works.filter((w) => w.status === 'watching').length;
+  const planned = works.filter((w) => w.status === 'planned').length;
   const hallCount = works.filter((w) => w.hallOfFame).length;
+  const scored = works.filter((w) => typeof w.score === 'number' && !Number.isNaN(w.score));
   const mean = computeMean(works);
+  const topScore = scored.reduce((m, w) => Math.max(m, w.score), 0);
+  const activeCats = new Set(works.map((w) => w.category)).size;
+  const compRate = works.length ? Math.round((completed / works.length) * 100) : 0;
+  const hallRate = works.length ? Math.round((hallCount / works.length) * 100) : 0;
   const currentYear = String(new Date().getFullYear());
   const yearCompleted = works.filter(
     (w) => w.status === 'completed' && String(w.completedAt || '').startsWith(currentYear)
   ).length;
 
   const kpis = [
-    { label: '收录总计', value: String(works.length), cls: '' },
-    { label: '已完成', value: String(completed), cls: '' },
-    { label: '在看 / 在玩', value: String(watching), cls: '' },
-    { label: '个人殿堂神作', value: String(hallCount), cls: 'accent-seal' },
-    { label: '平均评分', value: mean === null ? '—' : mean.toFixed(2), cls: 'accent-seal' },
-    { label: `${currentYear} 年完成`, value: String(yearCompleted), cls: '' }
+    { label: '收录总计', value: String(works.length), sub: `覆盖 ${activeCats} 大品类`, cls: '' },
+    { label: '已完成', value: String(completed), sub: `完结率 ${compRate}%`, cls: '' },
+    { label: '在看 / 在玩', value: String(watching), sub: `计划待看 ${planned} 部`, cls: '' },
+    { label: '个人殿堂神作', value: String(hallCount), sub: `占比 ${hallRate}%`, cls: 'accent-seal' },
+    { label: '平均评分', value: mean === null ? '—' : mean.toFixed(2), sub: scored.length ? `最高 ★${topScore.toFixed(1)} · ${scored.length} 评` : '暂无评分', cls: 'accent-seal' },
+    { label: `${currentYear} 年完成`, value: String(yearCompleted), sub: '今年已归档', cls: '' }
   ];
 
   container.innerHTML = kpis
@@ -48,6 +54,7 @@ function renderKpiStrip(container, works) {
       (k) => `<div class="kpi-card">
         <div class="kpi-label">${escapeHtml(k.label)}</div>
         <div class="kpi-value ${k.cls}">${escapeHtml(k.value)}</div>
+        <div class="kpi-sub">${escapeHtml(k.sub)}</div>
       </div>`
     )
     .join('');
@@ -55,26 +62,50 @@ function renderKpiStrip(container, works) {
 
 function renderCategoryBreakdown(container, works, activeCategory, onCategoryToggle) {
   const total = Math.max(works.length, 1);
-  const rowsHtml = CATEGORY_META.map((cat) => {
+  const stats = CATEGORY_META.map((cat) => {
     const subset = works.filter((w) => w.category === cat.id);
-    const pct = Math.round((subset.length / total) * 100);
     const mean = computeMean(subset);
-    const meanStr = mean === null ? '—' : mean.toFixed(1);
-    const pressed = activeCategory === cat.id ? 'true' : 'false';
-    return `<button type="button" class="cat-bar-btn" data-cat-toggle="${cat.id}" aria-pressed="${pressed}">
-      <span>${escapeHtml(cat.label)}</span>
-      <span class="cat-track"><span class="cat-fill" style="width:${pct}%"></span></span>
-      <span class="cat-stat">${subset.length} · ★${meanStr}</span>
-    </button>`;
-  }).join('');
+    return { ...cat, count: subset.length, mean };
+  });
+
+  const rowsHtml = stats
+    .map((cat) => {
+      const pct = Math.round((cat.count / total) * 100);
+      const meanStr = cat.mean === null ? '—' : cat.mean.toFixed(1);
+      const pressed = activeCategory === cat.id ? 'true' : 'false';
+      return `<button type="button" class="cat-bar-btn" data-cat-toggle="${cat.id}" aria-pressed="${pressed}">
+        <span>${escapeHtml(cat.label)}</span>
+        <span class="cat-track"><span class="cat-fill" style="width:${pct}%"></span></span>
+        <span class="cat-stat">${cat.count} · ★${meanStr}</span>
+      </button>`;
+    })
+    .join('');
 
   const novels = works.filter((w) => w.category === 'novel');
   const subSummary = Object.entries(NOVEL_SUBTYPE_LABELS)
     .map(([key, label]) => `${label} ${novels.filter((n) => n.subCategory === key).length}`)
     .join(' / ');
 
-  container.innerHTML = `<div class="cat-bars">${rowsHtml}</div>
-    <div class="chart-sub">日本小说构成：${escapeHtml(subSummary)}（点击品类条可筛选）</div>`;
+  container.innerHTML = `<div class="cat-bars">${rowsHtml}</div>`;
+
+  const titleEl = document.getElementById('cat-insight-title');
+  const subEl = document.getElementById('cat-insight-sub');
+  const footEl = document.getElementById('cat-insight-foot');
+  if (titleEl && subEl && footEl) {
+    const topByCount = [...stats].sort((a, b) => b.count - a.count)[0];
+    const withMean = stats.filter((s) => s.mean !== null);
+    const bestMean = [...withMean].sort((a, b) => b.mean - a.mean)[0];
+    if (works.length && topByCount && bestMean) {
+      titleEl.textContent =
+        topByCount.id === bestMean.id
+          ? `${topByCount.label}主力收藏（${topByCount.count} 部）· 均分 ★${bestMean.mean.toFixed(1)}`
+          : `${topByCount.label}收录最多（${topByCount.count} 部）· ${bestMean.label}均分 ★${bestMean.mean.toFixed(1)}`;
+    } else {
+      titleEl.textContent = '六大品类占比与均分';
+    }
+    subEl.textContent = '点击任意品类条可与下方画廊联动筛选';
+    footEl.textContent = `小说构成 · ${subSummary}`;
+  }
 
   for (const btn of container.querySelectorAll('[data-cat-toggle]')) {
     btn.addEventListener('click', () => onCategoryToggle(btn.dataset.catToggle));
@@ -98,6 +129,22 @@ function renderScoreHistogram(container, works) {
   );
   const maxCount = Math.max(...counts, 1);
 
+  const titleEl = document.getElementById('score-insight-title');
+  const subEl = document.getElementById('score-insight-sub');
+  const footEl = document.getElementById('score-insight-foot');
+  if (titleEl && subEl && footEl) {
+    const highCount = scored.filter((w) => w.score >= 9.0).length;
+    const highPct = scored.length ? Math.round((highCount / scored.length) * 100) : 0;
+    const mean = computeMean(works);
+    titleEl.textContent = scored.length
+      ? `9.0+ 高赞佳作占 ${highPct}%（${highCount}/${scored.length}）`
+      : '个人评分分布';
+    subEl.textContent = scored.length
+      ? `整体均分 ★${mean.toFixed(2)} · 区间 0.0 – 10.0`
+      : '0.0 – 10.0 分制';
+    footEl.textContent = 'HISTOGRAM · 朱红区间代表 9.0+ 高赞';
+  }
+
   const w = 340;
   const h = 152;
   const barW = 34;
@@ -116,7 +163,7 @@ function renderScoreHistogram(container, works) {
       const fillCls = idx >= 5 ? 'svg-fill-seal' : 'svg-fill-indigo';
       return `<g>
         <title>${escapeHtml(b.label)} 区间：${count} 部</title>
-        <rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="3" fill="${fillHex}" class="${fillCls}" opacity="${count ? '0.92' : '0.22'}"/>
+        <rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="5" fill="${fillHex}" class="${fillCls} hist-bar" style="--bar-idx:${idx}" opacity="${count ? '0.92' : '0.22'}"/>
         <text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" fill="#5c544b" class="svg-fill-sub" font-size="11" font-family="monospace">${count}</text>
         <text x="${x + barW / 2}" y="${baseLine + 16}" text-anchor="middle" fill="#7c7469" class="svg-fill-muted" font-size="10.5" font-family="monospace">${escapeHtml(b.label)}</text>
       </g>`;
@@ -151,6 +198,8 @@ function buildMonthTrendSvg(works, now) {
     months.push({ key, label, count });
   }
 
+  const last12Total = months.reduce((acc, m) => acc + m.count, 0);
+  const peakMonth = [...months].sort((a, b) => b.count - a.count)[0];
   const maxCount = Math.max(...months.map((m) => m.count), 1);
   const w = 360;
   const h = 84;
@@ -164,16 +213,20 @@ function buildMonthTrendSvg(works, now) {
       const fillCls = m.count ? 'svg-fill-indigo' : 'svg-heat-0';
       return `<g>
         <title>${escapeHtml(m.key)}：完成 ${m.count} 部</title>
-        <rect x="${x}" y="${y}" width="18" height="${barH}" rx="2" fill="${fillHex}" class="${fillCls}"/>
+        <rect x="${x}" y="${y}" width="18" height="${barH}" rx="4" fill="${fillHex}" class="${fillCls}${m.count ? ' hist-bar' : ''}" style="--bar-idx:${idx}"/>
         <text x="${x + 9}" y="${baseLine + 14}" text-anchor="middle" fill="#7c7469" class="svg-fill-muted" font-size="9" font-family="monospace">${escapeHtml(m.label)}</text>
       </g>`;
     })
     .join('');
 
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="近12个月完成趋势">
-    <line x1="6" y1="${baseLine}" x2="${w - 6}" y2="${baseLine}" stroke="#d8cfc0" class="svg-stroke-line" stroke-width="1"/>
-    ${bars}
-  </svg>`;
+  return {
+    last12Total,
+    peakMonth,
+    svg: `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="近12个月完成趋势">
+      <line x1="6" y1="${baseLine}" x2="${w - 6}" y2="${baseLine}" stroke="#d8cfc0" class="svg-stroke-line" stroke-width="1"/>
+      ${bars}
+    </svg>`
+  };
 }
 
 function buildHeatmapSvg(works, now) {
@@ -226,6 +279,18 @@ export function renderDashboard(works, activeCategory, { onCategoryToggle }) {
   renderScoreHistogram(scoreEl, works);
 
   const now = new Date();
-  actEl.innerHTML = `<div class="svg-box">${buildMonthTrendSvg(works, now)}</div>
+  const trend = buildMonthTrendSvg(works, now);
+  actEl.innerHTML = `<div class="svg-box">${trend.svg}</div>
     <div class="svg-box">${buildHeatmapSvg(works, now)}</div>`;
+
+  const actTitle = document.getElementById('act-insight-title');
+  const actSub = document.getElementById('act-insight-sub');
+  const actFoot = document.getElementById('act-insight-foot');
+  if (actTitle && actSub && actFoot) {
+    actTitle.textContent = trend.last12Total
+      ? `近 12 个月归档 ${trend.last12Total} 部 · ${trend.peakMonth.key} 峰值 ${trend.peakMonth.count} 部`
+      : '近 12 月趋势 & 52 周热力图';
+    actSub.textContent = '按完成日期汇总 · 悬停色块查看当日作品';
+    actFoot.innerHTML = `<span>52-WEEK CADENCE</span><span class="heat-legend" aria-hidden="true">LESS <i class="heat-dot" style="background:var(--heat-0)"></i><i class="heat-dot" style="background:var(--heat-1)"></i><i class="heat-dot" style="background:var(--heat-2)"></i><i class="heat-dot" style="background:var(--heat-3)"></i><i class="heat-dot" style="background:var(--heat-4)"></i> MORE</span>`;
+  }
 }

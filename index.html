@@ -20,6 +20,7 @@
       <div class="brand-block">
         <div class="brand-seal" aria-hidden="true">余録</div>
         <div>
+          <span class="brand-kicker">PRIVATE ARCHIVE · VOL. 2026</span>
           <h1 class="brand-title" id="site-title">余録 · YUROKU</h1>
           <p class="brand-subtitle" id="site-subtitle">个人书影游私藏与批注录 · <span id="header-count">0</span> 部收录</p>
         </div>
@@ -40,29 +41,40 @@
       </div>
     </header>
 
+    <section id="hero-spotlight" class="hero-spotlight" aria-label="私藏特选聚光灯"></section>
+
     <section id="stats-panel" class="stats-section" aria-label="统计可视化看板">
       <div id="kpi-strip" class="kpi-strip"></div>
       <div class="charts-grid">
         <article class="chart-card">
           <div class="chart-header">
-            <h2 class="chart-title">六大品类占比与均分</h2>
-            <span class="chart-sub">联动筛选</span>
+            <div>
+              <h2 class="chart-title" id="cat-insight-title">六大品类占比与均分</h2>
+              <p class="chart-sub" id="cat-insight-sub">点击任意品类条联动筛选</p>
+            </div>
           </div>
           <div id="chart-categories"></div>
+          <div class="chart-footer" id="cat-insight-foot">ARCHIVE BREAKDOWN</div>
         </article>
         <article class="chart-card">
           <div class="chart-header">
-            <h2 class="chart-title">个人评分分布直方图</h2>
-            <span class="chart-sub">0.0 – 10.0 分制</span>
+            <div>
+              <h2 class="chart-title" id="score-insight-title">个人评分分布</h2>
+              <p class="chart-sub" id="score-insight-sub">0.0 – 10.0 分制</p>
+            </div>
           </div>
           <div id="chart-scores"></div>
+          <div class="chart-footer" id="score-insight-foot">SCORE DISTRIBUTION</div>
         </article>
         <article class="chart-card">
           <div class="chart-header">
-            <h2 class="chart-title">近 12 月趋势 &amp; 52 周热力图</h2>
-            <span class="chart-sub">按完成日期统计</span>
+            <div>
+              <h2 class="chart-title" id="act-insight-title">近 12 月趋势 &amp; 52 周热力图</h2>
+              <p class="chart-sub" id="act-insight-sub">按完成日期统计</p>
+            </div>
           </div>
           <div id="chart-activity"></div>
+          <div class="chart-footer" id="act-insight-foot">52-WEEK RHYTHM</div>
         </article>
       </div>
     </section>
@@ -87,7 +99,10 @@
 
       <div class="filter-controls">
         <div class="filter-inputs">
-          <input type="search" class="input-control search-input" id="filter-search" placeholder="搜索片名 / 原名 / 作者 / 短评 / 标签…" aria-label="搜索作品">
+          <div class="search-field-wrap">
+            <input type="search" class="input-control search-input" id="filter-search" placeholder="搜索片名 / 原名 / 作者 / 短评 / 标签…" aria-label="搜索作品">
+            <kbd class="kbd-hint" aria-hidden="true">/</kbd>
+          </div>
           <select class="select-control" id="filter-status" aria-label="状态筛选">
             <option value="all">全部状态</option>
             <option value="completed">已完成</option>
@@ -102,6 +117,7 @@
           <button type="button" class="active-tag-chip" id="active-tag-chip" hidden>
             标签：<span id="active-tag-text"></span> ✕
           </button>
+          <button type="button" class="pill-btn reset-pill" id="btn-reset-filters" hidden>重置筛选 ✕</button>
         </div>
 
         <div class="filter-inputs" style="flex:0 0 auto">
@@ -162,6 +178,32 @@
         <p id="sort-status" role="status" class="visually-hidden"></p>
       </section>
     </main>
+
+    <footer class="site-colophon" aria-label="站点奥付">
+      <div class="colophon-brand">
+        <div class="brand-seal" aria-hidden="true">余録</div>
+        <div>
+          <strong class="colophon-title">余録 · YUROKU</strong>
+          <p class="colophon-desc">以零构建现代 Web 标准构筑的个人书影游私藏馆。全部评分与批注归属本地 JSON 与个人仓库。</p>
+        </div>
+      </div>
+      <div class="colophon-ledger">
+        <h2 class="colophon-heading">藏品台账 · LEDGER</h2>
+        <div id="colophon-stats" class="colophon-stats"></div>
+      </div>
+      <div class="colophon-shortcuts">
+        <h2 class="colophon-heading">快捷导航 · KEYS</h2>
+        <div class="shortcut-list">
+          <span><kbd>/</kbd> 搜索</span>
+          <span><kbd>N</kbd> 记录</span>
+          <span><kbd>1</kbd>-<kbd>4</kbd> 视图</span>
+        </div>
+        <div class="colophon-links">
+          <button type="button" class="btn-text-link" id="btn-back-top">↑ 回到卷首</button>
+          <a href="https://github.com/yule1048596-art/yule-media-log" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+        </div>
+      </div>
+    </footer>
   </div>
 
   <!-- Reader Modal -->
