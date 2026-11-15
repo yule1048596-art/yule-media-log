@@ -1,14 +1,42 @@
-// 余録 · YUROKU — Local Drafts, File System Access Write, and GitHub REST Sync
+// 余録 · YUROKU — local drafts, local file save, and GitHub Contents API sync
+//
+// Draft lifecycle (localStorage):
+//   edit      → draft saved and marked dirty, together with the git blob sha of the
+//               remote works.json it was based on ("base")
+//   push      → PUT with that base sha, so GitHub refuses (409) if the file changed
+//               elsewhere; on success the pushed text is kept as a "pushed" draft
+//               (GitHub Pages needs ~1 min to rebuild, so the page keeps showing it)
+//   on load   → a draft identical to data/works.json is dropped automatically
 
 const DRAFT_KEY = 'yuroku_draft_payload_v1';
 const DIRTY_KEY = 'yuroku_dirty_v1';
+const PUSHED_AT_KEY = 'yuroku_pushed_at_v1';
+const BASE_KEY = 'yuroku_base_sha_v1';
 const GH_CFG_KEY = 'yuroku_gh_config_v1';
+const PUSH_GRACE_MS = 15 * 60 * 1000;
 
 const VALID_CATEGORIES = new Set(['movie', 'jdrama', 'manga', 'anime', 'novel', 'game']);
 const VALID_SUBTYPES = new Set(['', 'light-novel', 'web-novel', 'general-novel']);
 const VALID_STATUSES = new Set(['completed', 'watching', 'planned', 'dropped']);
 
 let cachedFileHandle = null;
+
+function store(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Private mode / quota: the app still works for this session
+  }
+}
+
+function read(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 
 export function utf8ToBase64(str) {
   const bytes = new TextEncoder().encode(str);
@@ -25,6 +53,28 @@ export function base64ToUtf8(b64) {
   return new TextDecoder().decode(bytes);
 }
 
+/** Git blob sha of a text file — the same value GitHub uses as the file's `sha`. */
+export async function gitBlobSha(text) {
+  try {
+    if (!globalThis.crypto?.subtle) return '';
+    const body = new TextEncoder().encode(text);
+    const head = new TextEncoder().encode(`blob ${body.length}\0`);
+    const buf = new Uint8Array(head.length + body.length);
+    buf.set(head, 0);
+    buf.set(body, head.length);
+    const digest = await crypto.subtle.digest('SHA-1', buf);
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
+}
+
+function numOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 function normalizeWork(raw, index) {
   if (!raw || typeof raw !== 'object') {
     throw new Error(`第 ${index + 1} 条记录格式无效`);
@@ -32,17 +82,12 @@ function normalizeWork(raw, index) {
   const category = VALID_CATEGORIES.has(raw.category) ? raw.category : 'movie';
   const subCategory = VALID_SUBTYPES.has(raw.subCategory) ? raw.subCategory : '';
   const status = VALID_STATUSES.has(raw.status) ? raw.status : 'completed';
-
-  let score = null;
-  if (raw.score !== null && raw.score !== '' && raw.score !== undefined) {
-    const n = Number(raw.score);
-    if (!Number.isNaN(n)) {
-      score = Math.round(Math.min(10, Math.max(0, n)) * 10) / 10;
-    }
-  }
+  const scoreNum = numOrNull(raw.score);
+  const score = scoreNum === null ? null : Math.round(Math.min(10, Math.max(0, scoreNum)) * 10) / 10;
+  const year = numOrNull(raw.releaseYear);
 
   return {
-    id: String(raw.id || `w_${Date.now()}_${index}`),
+    id: String(raw.id || `w_import_${index}`),
     title: String(raw.title || '未命名作品').trim(),
     originalTitle: String(raw.originalTitle || '').trim(),
     category,
@@ -51,21 +96,15 @@ function normalizeWork(raw, index) {
     score,
     hallOfFame: Boolean(raw.hallOfFame),
     creator: String(raw.creator || '').trim(),
-    releaseYear: raw.releaseYear ? Number(raw.releaseYear) || null : null,
+    releaseYear: year ? Math.trunc(year) : null,
     coverUrl: String(raw.coverUrl || '').trim(),
     platform: String(raw.platform || '').trim(),
     progressText: String(raw.progressText || '').trim(),
-    progressCurrent: raw.progressCurrent !== null && raw.progressCurrent !== '' && raw.progressCurrent !== undefined
-      ? Number(raw.progressCurrent)
-      : null,
-    progressTotal: raw.progressTotal !== null && raw.progressTotal !== '' && raw.progressTotal !== undefined
-      ? Number(raw.progressTotal)
-      : null,
+    progressCurrent: numOrNull(raw.progressCurrent),
+    progressTotal: numOrNull(raw.progressTotal),
     completedAt: String(raw.completedAt || '').trim(),
-    updatedAt: String(raw.updatedAt || new Date().toISOString().slice(0, 10)).trim(),
-    tags: Array.isArray(raw.tags)
-      ? raw.tags.map((t) => String(t).trim()).filter(Boolean)
-      : [],
+    updatedAt: String(raw.updatedAt || raw.completedAt || '').trim(),
+    tags: Array.isArray(raw.tags) ? raw.tags.map((t) => String(t).trim()).filter(Boolean) : [],
     oneLiner: String(raw.oneLiner || '').trim(),
     reviewMd: String(raw.reviewMd || ''),
     isDemo: Boolean(raw.isDemo)
@@ -74,93 +113,132 @@ function normalizeWork(raw, index) {
 
 export function validateDataset(obj) {
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.works)) {
-    throw new Error('JSON 须包含 works 数组');
+    throw new Error('JSON 里需要有 works 数组');
+  }
+  const works = obj.works.map((item, idx) => normalizeWork(item, idx));
+  const seen = new Set();
+  for (const w of works) {
+    while (seen.has(w.id)) w.id = `${w.id}_dup`;
+    seen.add(w.id);
   }
   return {
     version: Number(obj.version) || 1,
     siteTitle: String(obj.siteTitle || '余録 · YUROKU'),
-    siteSubtitle: String(obj.siteSubtitle || '个人书影游私藏与批注录'),
-    works: obj.works.map((item, idx) => normalizeWork(item, idx))
+    siteSubtitle: String(obj.siteSubtitle || ''),
+    works
   };
 }
 
-export function hasDirtyDraft() {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(DIRTY_KEY) === '1';
-  } catch {
-    return false;
-  }
+export function serializeDataset(data) {
+  return `${JSON.stringify(validateDataset(data), null, 2)}\n`;
 }
 
-export function saveDraft(data) {
-  try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
-    localStorage.setItem(DIRTY_KEY, '1');
-  } catch {
-    // Ignore storage quota errors silently
-  }
+/** Local edits: keep them, remember which remote version they started from. */
+export function saveDraft(data, baseSha) {
+  store(DRAFT_KEY, JSON.stringify(data));
+  store(DIRTY_KEY, '1');
+  if (baseSha) store(BASE_KEY, baseSha);
+}
+
+/** After a successful push of exactly `text`, whose new blob sha is `sha`. */
+export function markPushed(text, sha) {
+  store(DRAFT_KEY, text);
+  store(DIRTY_KEY, null);
+  store(PUSHED_AT_KEY, String(Date.now()));
+  store(BASE_KEY, sha || null);
 }
 
 export function clearDraft() {
-  try {
-    localStorage.removeItem(DRAFT_KEY);
-    localStorage.removeItem(DIRTY_KEY);
-  } catch {
-    // Ignore
-  }
+  store(DRAFT_KEY, null);
+  store(DIRTY_KEY, null);
+  store(PUSHED_AT_KEY, null);
+  store(BASE_KEY, null);
 }
 
-export async function loadInitialData() {
-  let remoteData = { version: 1, siteTitle: '余録 · YUROKU', siteSubtitle: '个人书影游私藏与批注录', works: [] };
+async function fetchWorksJson() {
+  const res = await fetch('./data/works.json', { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`读取 data/works.json 失败（HTTP ${res.status}）`);
+  const text = await res.text();
+  let parsed;
   try {
-    const res = await fetch('./data/works.json', { cache: 'no-cache' });
-    if (res.ok) {
-      remoteData = validateDataset(await res.json());
-    }
+    parsed = JSON.parse(text);
   } catch {
-    // Fallback if offline or missing file
+    throw new Error('data/works.json 不是有效的 JSON');
+  }
+  return { data: validateDataset(parsed), sha: await gitBlobSha(text) };
+}
+
+/**
+ * @returns {Promise<{data: object, isDirty: boolean, pending: boolean, remoteOk: boolean,
+ *   baseSha: string, conflict: boolean}>}
+ */
+export async function loadInitialData() {
+  let remote = null;
+  let remoteSha = '';
+  try {
+    ({ data: remote, sha: remoteSha } = await fetchWorksJson());
+  } catch {
+    remote = null;
   }
 
+  let draft = null;
   try {
-    if (localStorage.getItem(DIRTY_KEY) === '1') {
-      const rawDraft = localStorage.getItem(DRAFT_KEY);
-      if (rawDraft) {
-        return { data: validateDataset(JSON.parse(rawDraft)), isDirty: true };
-      }
-    }
+    const raw = read(DRAFT_KEY);
+    if (raw) draft = validateDataset(JSON.parse(raw));
   } catch {
     clearDraft();
   }
-  return { data: remoteData, isDirty: false };
+
+  const empty = { version: 1, siteTitle: '余録 · YUROKU', siteSubtitle: '', works: [] };
+  const base = read(BASE_KEY) || '';
+  const dirty = read(DIRTY_KEY) === '1';
+  const pushedAt = Number(read(PUSHED_AT_KEY)) || 0;
+  const recentlyPushed = pushedAt > 0 && Date.now() - pushedAt < PUSH_GRACE_MS;
+  const result = (data, extra) => ({ data, isDirty: false, pending: false, remoteOk: Boolean(remote), baseSha: '', conflict: false, ...extra });
+
+  if (!draft) return result(remote || empty, { baseSha: remoteSha });
+  if (!remote) return result(draft, { isDirty: dirty, baseSha: base });
+
+  if (serializeDataset(draft) === serializeDataset(remote)) {
+    clearDraft();
+    return result(remote, { baseSha: remoteSha });
+  }
+  if (dirty) {
+    // The deployed file is no longer the version these edits started from
+    // (and not merely lagging behind our own recent push).
+    const conflict = Boolean(base && remoteSha && base !== remoteSha && !recentlyPushed);
+    return result(draft, { isDirty: true, baseSha: base, conflict });
+  }
+  if (recentlyPushed) return result(draft, { pending: true, baseSha: base });
+  clearDraft();
+  return result(remote, { baseSha: remoteSha });
 }
 
-export function serializeDataset(data) {
-  const cleaned = validateDataset(data);
-  return `${JSON.stringify(cleaned, null, 2)}\n`;
+/** Re-read the deployed data/works.json. */
+export async function fetchRemoteDataset() {
+  return fetchWorksJson();
 }
 
-export async function saveToLocalRepoFile(data, forcePick = false) {
+/** Writes works.json through the File System Access API, or downloads it. Keeps the draft. */
+export async function saveToLocalFile(data) {
   const jsonText = serializeDataset(data);
-
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
-      if (!cachedFileHandle || forcePick) {
+      if (!cachedFileHandle) {
         cachedFileHandle = await window.showSaveFilePicker({
           suggestedName: 'works.json',
-          types: [{ description: 'JSON Data', accept: { 'application/json': ['.json'] } }]
+          types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
         });
       }
       const writable = await cachedFileHandle.createWritable();
       await writable.write(jsonText);
       await writable.close();
-      clearDraft();
-      return { method: 'picker', message: '已直接写入本地 works.json' };
+      return { method: 'picker' };
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
       cachedFileHandle = null;
     }
   }
-
   const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -169,125 +247,147 @@ export async function saveToLocalRepoFile(data, forcePick = false) {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
-  clearDraft();
-  return { method: 'download', message: '已下载 works.json，请覆盖仓库 data/works.json' };
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { method: 'download' };
 }
 
 function inferDefaultOwnerRepo() {
   try {
-    if (typeof location !== 'undefined' && location.hostname.endsWith('.github.io')) {
+    if (location.hostname.endsWith('.github.io')) {
       const owner = location.hostname.slice(0, -'.github.io'.length);
       const seg = location.pathname.split('/').filter(Boolean)[0];
       if (owner && seg) return `${owner}/${seg}`;
       if (owner) return `${owner}/${owner}.github.io`;
     }
   } catch {
-    // Ignore environments without location
+    // Non-browser environment
   }
   return 'yule1048596-art/yule-media-log';
 }
 
 export function getGitHubConfig() {
-  const defaultRepo = inferDefaultOwnerRepo();
+  const fallback = { ownerRepo: inferDefaultOwnerRepo(), branch: 'main', filePath: 'data/works.json', token: '' };
   try {
-    const raw = localStorage.getItem(GH_CFG_KEY);
-    if (!raw) return { ownerRepo: defaultRepo, branch: 'main', filePath: 'data/works.json', token: '' };
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(read(GH_CFG_KEY) || 'null');
+    if (!parsed) return fallback;
     return {
-      ownerRepo: String(parsed.ownerRepo || defaultRepo).trim() || defaultRepo,
-      branch: String(parsed.branch || 'main').trim() || 'main',
-      filePath: String(parsed.filePath || 'data/works.json').trim() || 'data/works.json',
+      ownerRepo: String(parsed.ownerRepo || '').trim() || fallback.ownerRepo,
+      branch: String(parsed.branch || '').trim() || 'main',
+      filePath: String(parsed.filePath || '').trim() || 'data/works.json',
       token: String(parsed.token || '').trim()
     };
   } catch {
-    return { ownerRepo: defaultRepo, branch: 'main', filePath: 'data/works.json', token: '' };
+    return fallback;
   }
 }
 
 export function saveGitHubConfig(cfg) {
   const normalized = {
     ownerRepo: String(cfg?.ownerRepo || '').trim(),
-    branch: String(cfg?.branch || 'main').trim() || 'main',
-    filePath: String(cfg?.filePath || 'data/works.json').trim() || 'data/works.json',
+    branch: String(cfg?.branch || '').trim() || 'main',
+    filePath: String(cfg?.filePath || '').trim().replace(/^\/+/, '') || 'data/works.json',
     token: String(cfg?.token || '').trim()
   };
-  localStorage.setItem(GH_CFG_KEY, JSON.stringify(normalized));
+  store(GH_CFG_KEY, JSON.stringify(normalized));
   return normalized;
 }
 
 function assertGitHubConfig(cfg) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(cfg.ownerRepo)) {
-    throw new Error('仓库格式须为 owner/repo（例如 yule1048596-art/yule-media-log）');
+    throw new Error('仓库格式应为 owner/repo');
   }
-  if (!cfg.token) {
-    throw new Error('请先填写 GitHub Personal Access Token');
-  }
+  if (!cfg.token) throw new Error('还没有填写访问令牌');
 }
 
-function buildContentsEndpoint(cfg) {
-  const cleanPath = cfg.filePath.replace(/^\/+/, '');
-  return `https://api.github.com/repos/${cfg.ownerRepo}/contents/${cleanPath}`;
+function contentsUrl(cfg) {
+  const path = cfg.filePath.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
+  return `https://api.github.com/repos/${cfg.ownerRepo}/contents/${path}`;
 }
 
-export async function pushToGitHub(data, cfg) {
-  assertGitHubConfig(cfg);
-  const endpoint = buildContentsEndpoint(cfg);
-  const headers = {
+function ghHeaders(cfg) {
+  return {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${cfg.token}`,
-    'Content-Type': 'application/json'
+    'X-GitHub-Api-Version': '2022-11-28'
   };
-
-  let sha = '';
-  const getRes = await fetch(`${endpoint}?ref=${encodeURIComponent(cfg.branch)}`, { headers });
-  if (getRes.ok) {
-    const info = await getRes.json();
-    sha = info.sha || '';
-  } else if (getRes.status !== 404) {
-    const err = await getRes.json().catch(() => ({}));
-    throw new Error(err.message || `读取远端 SHA 失败 (HTTP ${getRes.status})`);
-  }
-
-  const jsonText = serializeDataset(data);
-  const putBody = {
-    message: `chore(media): update ${cfg.filePath} via Yuroku web editor`,
-    content: utf8ToBase64(jsonText),
-    branch: cfg.branch,
-    ...(sha ? { sha } : {})
-  };
-
-  const putRes = await fetch(endpoint, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(putBody)
-  });
-
-  if (!putRes.ok) {
-    const err = await putRes.json().catch(() => ({}));
-    throw new Error(err.message || `提交 GitHub 失败 (HTTP ${putRes.status})`);
-  }
-
-  clearDraft();
-  return putRes.json();
 }
 
+export class ConflictError extends Error {
+  constructor() {
+    super('线上的数据文件已经在别处被修改过（比如另一台设备），为了不覆盖它，这次没有推送');
+    this.name = 'ConflictError';
+  }
+}
+
+async function ghError(res, fallback) {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401) return new Error('令牌无效或已过期（HTTP 401）');
+  if (res.status === 403) return new Error('没有写入权限，请检查令牌的 Contents 权限（HTTP 403）');
+  if (res.status === 404) return new Error('找不到仓库或文件，请检查仓库名、分支和路径（HTTP 404）');
+  return new Error(body.message ? `${fallback}：${body.message}` : `${fallback}（HTTP ${res.status}）`);
+}
+
+async function currentRemoteSha(cfg) {
+  const res = await fetch(`${contentsUrl(cfg)}?ref=${encodeURIComponent(cfg.branch)}`, { headers: ghHeaders(cfg), cache: 'no-store' });
+  if (res.ok) return (await res.json()).sha || '';
+  if (res.status === 404) return '';
+  throw await ghError(res, '读取远端文件失败');
+}
+
+/**
+ * Push a snapshot of `data`. With `baseSha`, GitHub rejects the write if the file has
+ * changed since that version (ConflictError). With `force`, overwrite whatever is there.
+ * @returns {Promise<{text: string, sha: string}>} exactly what was written, and its new sha
+ */
+export async function pushToGitHub(data, cfg, { baseSha = '', force = false } = {}) {
+  assertGitHubConfig(cfg);
+  const text = serializeDataset(data);
+  const sha = force || !baseSha ? await currentRemoteSha(cfg) : baseSha;
+
+  const res = await fetch(contentsUrl(cfg), {
+    method: 'PUT',
+    headers: { ...ghHeaders(cfg), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: `chore(data): update ${cfg.filePath} from Yuroku`,
+      content: utf8ToBase64(text),
+      branch: cfg.branch,
+      ...(sha ? { sha } : {})
+    })
+  });
+  if (res.status === 409) throw new ConflictError();
+  if (res.status === 422) {
+    const body = await res.json().catch(() => ({}));
+    if (!force && /sha/i.test(body.message || '')) throw new ConflictError();
+    throw new Error(body.message ? `推送失败：${body.message}` : '推送失败（HTTP 422）');
+  }
+  if (!res.ok) throw await ghError(res, '推送失败');
+  const json = await res.json().catch(() => ({}));
+  return { text, sha: json?.content?.sha || (await gitBlobSha(text)) };
+}
+
+/** Latest committed version straight from the GitHub API (not the Pages copy). */
 export async function pullFromGitHub(cfg) {
   assertGitHubConfig(cfg);
-  const endpoint = `${buildContentsEndpoint(cfg)}?ref=${encodeURIComponent(cfg.branch)}`;
-  const res = await fetch(endpoint, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${cfg.token}`
-    }
+  // The raw media type also works for files over 1 MB, where `content` would be empty.
+  const res = await fetch(`${contentsUrl(cfg)}?ref=${encodeURIComponent(cfg.branch)}`, {
+    headers: { ...ghHeaders(cfg), Accept: 'application/vnd.github.raw+json' },
+    cache: 'no-store'
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `拉取远端数据失败 (HTTP ${res.status})`);
+  if (!res.ok) throw await ghError(res, '拉取失败');
+  const text = await res.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('远端文件不是有效的 JSON');
   }
-  const info = await res.json();
-  const decoded = base64ToUtf8(info.content || '');
-  const dataset = validateDataset(JSON.parse(decoded));
-  clearDraft();
-  return dataset;
+  return { data: validateDataset(parsed), sha: await gitBlobSha(text) };
+}
+
+export function serializedEquals(a, b) {
+  try {
+    return serializeDataset(a) === serializeDataset(b);
+  } catch {
+    return false;
+  }
 }

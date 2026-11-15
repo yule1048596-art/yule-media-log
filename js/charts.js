@@ -1,328 +1,257 @@
-// 余録 · YUROKU — Pure SVG Data Visualization Dashboard
+// 余録 · YUROKU — stats page: stat tiles, ranked bars, column charts, top list, tags
+//
+// Charts are plain HTML/CSS (crisp at any width). Every chart has a table twin;
+// tooltips only repeat values that are also reachable without hovering.
 
-import { escapeHtml } from './markdown.js';
+import { CATEGORIES, esc, mean, formatScore, hasScore, finishedYear, categoryLabel } from './meta.js';
+import { coverSrc } from './markdown.js';
+import { workHref } from './views.js';
 
-export const CATEGORY_META = [
-  { id: 'movie', label: '电影' },
-  { id: 'jdrama', label: '日本电视剧' },
-  { id: 'manga', label: '日本漫画' },
-  { id: 'anime', label: '动漫' },
-  { id: 'novel', label: '日本小说' },
-  { id: 'game', label: '游戏' }
-];
-
-export const NOVEL_SUBTYPE_LABELS = {
-  'light-novel': '轻小说',
-  'web-novel': '网络小说',
-  'general-novel': '一般小说'
-};
-
-const SVG_PALETTES = {
-  light: {
-    indigo: '#24486e',
-    seal: '#bd3928',
-    sub: '#595148',
-    muted: '#746b60',
-    line: '#d6ccba',
-    heat: ['#eae2d3', '#c2d1df', '#6d92b6', '#24486e', '#bd3928']
-  },
-  dark: {
-    indigo: '#7ba6d4',
-    seal: '#e46552',
-    sub: '#b6ae9f',
-    muted: '#8e8679',
-    line: '#38332d',
-    heat: ['#24211e', '#22374c', '#375c82', '#7ba6d4', '#e46552']
+export function statsYears(works) {
+  const years = new Set();
+  for (const w of works) {
+    const y = finishedYear(w);
+    if (y) years.add(y);
   }
-};
-
-function getSvgPalette() {
-  const scheme = document.querySelector('meta[name="color-scheme"]')?.content;
-  const isDark =
-    scheme === 'dark' ||
-    (scheme !== 'light' && Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
-  return isDark ? SVG_PALETTES.dark : SVG_PALETTES.light;
+  return [...years].sort((a, b) => b.localeCompare(a));
 }
 
-function computeMean(items) {
-  const scored = items.filter((w) => typeof w.score === 'number' && !Number.isNaN(w.score));
-  if (!scored.length) return null;
-  const sum = scored.reduce((acc, w) => acc + w.score, 0);
-  return sum / scored.length;
+function niceScale(max) {
+  if (max <= 0) return { top: 1, step: 1 };
+  const rough = max / 4;
+  const pow = 10 ** Math.floor(Math.log10(rough));
+  const mult = [1, 2, 5, 10].find((s) => s * pow >= rough) || 10;
+  const step = Math.max(1, mult * pow);
+  let top = Math.ceil(max / step) * step;
+  if (top === max) top += step; // headroom for the peak label
+  return { top, step };
 }
 
-function renderKpiStrip(container, works) {
-  const completed = works.filter((w) => w.status === 'completed').length;
-  const watching = works.filter((w) => w.status === 'watching').length;
-  const planned = works.filter((w) => w.status === 'planned').length;
-  const hallCount = works.filter((w) => w.hallOfFame).length;
-  const scored = works.filter((w) => typeof w.score === 'number' && !Number.isNaN(w.score));
-  const mean = computeMean(works);
-  const topScore = scored.reduce((m, w) => Math.max(m, w.score), 0);
-  const activeCats = new Set(works.map((w) => w.category)).size;
-  const compRate = works.length ? Math.round((completed / works.length) * 100) : 0;
-  const hallRate = works.length ? Math.round((hallCount / works.length) * 100) : 0;
-  const currentYear = String(new Date().getFullYear());
-  const yearCompleted = works.filter(
-    (w) => w.status === 'completed' && String(w.completedAt || '').startsWith(currentYear)
-  ).length;
-
-  const kpis = [
-    { label: '收录总计', value: String(works.length), sub: `覆盖 ${activeCats} 大品类`, cls: '' },
-    { label: '已完成', value: String(completed), sub: `完结率 ${compRate}%`, cls: '' },
-    { label: '在看 / 在玩', value: String(watching), sub: `计划待看 ${planned} 部`, cls: '' },
-    { label: '个人殿堂神作', value: String(hallCount), sub: `占比 ${hallRate}%`, cls: 'accent-seal' },
-    { label: '平均评分', value: mean === null ? '—' : mean.toFixed(2), sub: scored.length ? `最高 ★${topScore.toFixed(1)} · ${scored.length} 评` : '暂无评分', cls: 'accent-seal' },
-    { label: `${currentYear} 年完成`, value: String(yearCompleted), sub: '今年已归档', cls: '' }
-  ];
-
-  container.innerHTML = kpis
-    .map(
-      (k, idx) => `<div class="kpi-card">
-        <div class="kpi-head">
-          <span class="kpi-label">${escapeHtml(k.label)}</span>
-          <span class="kpi-idx" aria-hidden="true">${String(idx + 1).padStart(2, '0')}</span>
-        </div>
-        <div class="kpi-value ${k.cls}">${escapeHtml(k.value)}</div>
-        <div class="kpi-sub">${escapeHtml(k.sub)}</div>
-      </div>`
-    )
-    .join('');
+function tableTwin(headers, rows) {
+  const head = headers.map((h, i) => `<th scope="col"${i > 0 ? ' class="num"' : ''}>${esc(h)}</th>`).join('');
+  const body = rows.map((r) => `<tr>${r.map((c, i) => (i === 0 ? `<th scope="row">${esc(c)}</th>` : `<td class="num">${esc(c)}</td>`)).join('')}</tr>`).join('');
+  return `<details class="chart-table"><summary>查看数据表</summary><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></details>`;
 }
 
-function renderCategoryBreakdown(container, works, activeCategory, onCategoryToggle) {
-  const total = Math.max(works.length, 1);
-  const stats = CATEGORY_META.map((cat) => {
-    const subset = works.filter((w) => w.category === cat.id);
-    const mean = computeMean(subset);
-    return { ...cat, count: subset.length, mean };
-  });
+function columnChart(data, { unit = '部' } = {}) {
+  const max = Math.max(0, ...data.map((d) => d.value));
+  const { top, step } = niceScale(max);
+  const ticks = [];
+  for (let t = 0; t <= top + 1e-9; t += step) ticks.push(t);
+  // Direct-label only a single, unambiguous peak; ties are read off the axis.
+  const peaks = data.filter((d) => d.value === max).length;
+  const peak = max > 0 && peaks === 1 ? data.findIndex((d) => d.value === max) : -1;
+  const pct = (v) => `${((v / top) * 100).toFixed(2)}%`;
 
-  const rowsHtml = stats
-    .map((cat) => {
-      const pct = Math.round((cat.count / total) * 100);
-      const meanStr = cat.mean === null ? '—' : cat.mean.toFixed(1);
-      const pressed = activeCategory === cat.id ? 'true' : 'false';
-      return `<button type="button" class="cat-bar-btn" data-cat-toggle="${cat.id}" aria-pressed="${pressed}">
-        <span>${escapeHtml(cat.label)}</span>
-        <span class="cat-track"><span class="cat-fill" style="width:${pct}%"></span></span>
-        <span class="cat-stat">${cat.count} · ★${meanStr}</span>
-      </button>`;
-    })
-    .join('');
+  const yLabels = ticks.map((t) => `<span style="bottom:${pct(t)}">${t}</span>`).join('');
+  const grid = ticks.map((t) => `<div class="colchart-grid${t === 0 ? ' is-base' : ''}" style="bottom:${pct(t)}"></div>`).join('');
+  const cols = data.map((d, i) => {
+    const label = `${d.tip}：${d.value} ${unit}`;
+    return `<div class="col${d.value === 0 ? ' is-zero' : ''}" style="--h:${pct(d.value)}" tabindex="0" role="img" ` +
+      `aria-label="${esc(label)}" data-tip-value="${esc(`${d.value} ${unit}`)}" data-tip-label="${esc(d.tip)}">` +
+      `<span class="col-bar"></span>${i === peak ? `<span class="col-peak">${d.value}</span>` : ''}</div>`;
+  }).join('');
+  const xLabels = data.map((d) => `<span>${esc(d.label)}</span>`).join('');
 
-  const novels = works.filter((w) => w.category === 'novel');
-  const subSummary = Object.entries(NOVEL_SUBTYPE_LABELS)
-    .map(([key, label]) => `${label} ${novels.filter((n) => n.subCategory === key).length}`)
-    .join(' / ');
-
-  container.innerHTML = `<div class="cat-bars">${rowsHtml}</div>`;
-
-  const titleEl = document.getElementById('cat-insight-title');
-  const subEl = document.getElementById('cat-insight-sub');
-  const footEl = document.getElementById('cat-insight-foot');
-  if (titleEl && subEl && footEl) {
-    const topByCount = [...stats].sort((a, b) => b.count - a.count)[0];
-    const withMean = stats.filter((s) => s.mean !== null);
-    const bestMean = [...withMean].sort((a, b) => b.mean - a.mean)[0];
-    if (works.length && topByCount && bestMean) {
-      titleEl.textContent =
-        topByCount.id === bestMean.id
-          ? `${topByCount.label}主力收藏（${topByCount.count} 部）· 均分 ★${bestMean.mean.toFixed(1)}`
-          : `${topByCount.label}收录最多（${topByCount.count} 部）· ${bestMean.label}均分 ★${bestMean.mean.toFixed(1)}`;
-    } else {
-      titleEl.textContent = '六大品类占比与均分';
-    }
-    subEl.textContent = '点击任意品类条可与下方画廊联动筛选';
-    footEl.textContent = `小说构成 · ${subSummary}`;
-  }
-
-  for (const btn of container.querySelectorAll('[data-cat-toggle]')) {
-    btn.addEventListener('click', () => onCategoryToggle(btn.dataset.catToggle));
-  }
-}
-
-function renderScoreHistogram(container, works) {
-  const buckets = [
-    { label: '<6', min: -1, max: 6 },
-    { label: '6.0+', min: 6, max: 7 },
-    { label: '7.0+', min: 7, max: 8 },
-    { label: '8.0+', min: 8, max: 8.5 },
-    { label: '8.5+', min: 8.5, max: 9 },
-    { label: '9.0+', min: 9, max: 9.5 },
-    { label: '9.5+', min: 9.5, max: 10.1 }
-  ];
-
-  const scored = works.filter((w) => typeof w.score === 'number' && !Number.isNaN(w.score));
-  const counts = buckets.map(
-    (b) => scored.filter((w) => w.score >= b.min && w.score < b.max).length
-  );
-  const maxCount = Math.max(...counts, 1);
-
-  const titleEl = document.getElementById('score-insight-title');
-  const subEl = document.getElementById('score-insight-sub');
-  const footEl = document.getElementById('score-insight-foot');
-  if (titleEl && subEl && footEl) {
-    const highCount = scored.filter((w) => w.score >= 9.0).length;
-    const highPct = scored.length ? Math.round((highCount / scored.length) * 100) : 0;
-    const mean = computeMean(works);
-    titleEl.textContent = scored.length
-      ? `9.0+ 高赞佳作占 ${highPct}%（${highCount}/${scored.length}）`
-      : '个人评分分布';
-    subEl.textContent = scored.length
-      ? `整体均分 ★${mean.toFixed(2)} · 区间 0.0 – 10.0`
-      : '0.0 – 10.0 分制';
-    footEl.textContent = 'HISTOGRAM · 朱红区间代表 9.0+ 高赞';
-  }
-
-  const pal = getSvgPalette();
-  const w = 340;
-  const h = 152;
-  const barW = 34;
-  const gap = 12;
-  const leftPad = 14;
-  const baseLine = 122;
-  const maxBarH = 92;
-
-  const barsSvg = buckets
-    .map((b, idx) => {
-      const count = counts[idx];
-      const barH = count === 0 ? 3 : Math.max(8, Math.round((count / maxCount) * maxBarH));
-      const x = leftPad + idx * (barW + gap);
-      const y = baseLine - barH;
-      const fillCls = idx >= 5 ? 'svg-fill-seal' : 'svg-fill-indigo';
-      const fillHex = idx >= 5 ? pal.seal : pal.indigo;
-      return `<g>
-        <title>${escapeHtml(b.label)} 区间：${count} 部</title>
-        <rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="5" fill="${fillHex}" class="${fillCls} hist-bar" style="--bar-idx:${idx}" opacity="${count ? '0.92' : '0.22'}"/>
-        <text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" fill="${pal.sub}" class="svg-fill-sub" font-size="11" font-family="monospace">${count}</text>
-        <text x="${x + barW / 2}" y="${baseLine + 16}" text-anchor="middle" fill="${pal.muted}" class="svg-fill-muted" font-size="10.5" font-family="monospace">${escapeHtml(b.label)}</text>
-      </g>`;
-    })
-    .join('');
-
-  container.innerHTML = `<div class="svg-box">
-    <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="个人评分分布直方图">
-      <line x1="8" y1="${baseLine}" x2="${w - 8}" y2="${baseLine}" stroke="${pal.line}" class="svg-stroke-line" stroke-width="1"/>
-      ${barsSvg}
-    </svg>
+  return `<div class="colchart">
+    <div class="colchart-y" aria-hidden="true">${yLabels}</div>
+    <div class="colchart-plot">${grid}<div class="colchart-cols">${cols}</div></div>
+    <div class="colchart-x" aria-hidden="true">${xLabels}</div>
   </div>`;
 }
 
-function formatLocalDateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+const SCORE_BINS = [
+  { label: '<6', tip: '6 分以下', test: (s) => s < 6 },
+  { label: '6', tip: '6.0–6.4', test: (s) => s >= 6 && s < 6.5 },
+  { label: '6.5', tip: '6.5–6.9', test: (s) => s >= 6.5 && s < 7 },
+  { label: '7', tip: '7.0–7.4', test: (s) => s >= 7 && s < 7.5 },
+  { label: '7.5', tip: '7.5–7.9', test: (s) => s >= 7.5 && s < 8 },
+  { label: '8', tip: '8.0–8.4', test: (s) => s >= 8 && s < 8.5 },
+  { label: '8.5', tip: '8.5–8.9', test: (s) => s >= 8.5 && s < 9 },
+  { label: '9', tip: '9.0–9.4', test: (s) => s >= 9 && s < 9.5 },
+  { label: '9.5', tip: '9.5–10', test: (s) => s >= 9.5 }
+];
+
+function panel(title, sub, body, { wide = false } = {}) {
+  return `<section class="panel${wide ? ' panel-wide' : ''}">
+    <h2 class="panel-title">${esc(title)}</h2>
+    ${sub ? `<p class="panel-sub">${esc(sub)}</p>` : ''}
+    <div class="panel-body">${body}</div>
+  </section>`;
 }
 
-function buildMonthTrendSvg(works, now) {
-  const months = [];
-  for (let i = 11; i >= 0; i -= 1) {
-    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    const label = `${dt.getMonth() + 1}月`;
-    const count = works.filter((w) => {
-      const dateStr = w.completedAt || (w.status === 'completed' ? w.updatedAt : '');
-      return String(dateStr).startsWith(key);
-    }).length;
-    months.push({ key, label, count });
+function stat(label, value, sub = '', { text = false } = {}) {
+  return `<div class="stat">
+    <span class="stat-label">${esc(label)}</span>
+    <span class="stat-value${text ? ' is-text' : ''}">${esc(value)}</span>
+    <span class="stat-sub">${esc(sub) || '&nbsp;'}</span>
+  </div>`;
+}
+
+function byScoreDesc(a, b) {
+  return (b.score - a.score) || (Number(b.hallOfFame) - Number(a.hallOfFame)) ||
+    String(b.completedAt || '').localeCompare(String(a.completedAt || ''));
+}
+
+export function renderStats(works, year) {
+  const all = year === 'all';
+  const scoped = all ? works : works.filter((w) => finishedYear(w) === year);
+  if (!scoped.length) {
+    return `<div class="empty"><p class="empty-title">${all ? '还没有任何记录' : `${esc(year)} 年还没有看完的作品`}</p></div>`;
   }
 
-  const pal = getSvgPalette();
-  const last12Total = months.reduce((acc, m) => acc + m.count, 0);
-  const peakMonth = [...months].sort((a, b) => b.count - a.count)[0];
-  const maxCount = Math.max(...months.map((m) => m.count), 1);
-  const w = 360;
-  const h = 84;
-  const baseLine = 62;
-  const bars = months
-    .map((m, idx) => {
-      const barH = m.count === 0 ? 3 : Math.max(7, Math.round((m.count / maxCount) * 44));
-      const x = 10 + idx * 29;
-      const y = baseLine - barH;
-      const fillCls = m.count ? 'svg-fill-indigo' : 'svg-heat-0';
-      const fillHex = m.count ? pal.indigo : pal.heat[0];
-      return `<g>
-        <title>${escapeHtml(m.key)}：完成 ${m.count} 部</title>
-        <rect x="${x}" y="${y}" width="18" height="${barH}" rx="4" fill="${fillHex}" class="${fillCls}${m.count ? ' hist-bar' : ''}" style="--bar-idx:${idx}"/>
-        <text x="${x + 9}" y="${baseLine + 14}" text-anchor="middle" fill="${pal.muted}" class="svg-fill-muted" font-size="9" font-family="monospace">${escapeHtml(m.label)}</text>
-      </g>`;
-    })
-    .join('');
+  const scored = scoped.filter(hasScore);
+  const avg = mean(scored.map((w) => w.score));
+  const hof = scoped.filter((w) => w.hallOfFame).length;
+  const hofScored = scored.filter((w) => w.hallOfFame).length;
+  const top = [...scored].sort(byScoreDesc);
 
-  return {
-    last12Total,
-    peakMonth,
-    svg: `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="近12个月完成趋势">
-      <line x1="6" y1="${baseLine}" x2="${w - 6}" y2="${baseLine}" stroke="${pal.line}" class="svg-stroke-line" stroke-width="1"/>
-      ${bars}
-    </svg>`
+  // ----- KPI tiles -----
+  let kpis;
+  if (all) {
+    const count = (s) => scoped.filter((w) => w.status === s).length;
+    const thisYear = String(new Date().getFullYear());
+    const doneThisYear = works.filter((w) => finishedYear(w) === thisYear);
+    const latest = [...doneThisYear].sort((a, b) => b.completedAt.localeCompare(a.completedAt))[0];
+    kpis = [
+      stat('收录作品', String(scoped.length), `已完成 ${count('completed')} · 进行中 ${count('watching')} · 计划 ${count('planned')}`),
+      stat('平均分', avg === null ? '—' : avg.toFixed(2), scored.length ? `最高 ${formatScore(top[0].score)} · 最低 ${formatScore(top[top.length - 1].score)}` : '还没有评分'),
+      stat('殿堂', String(hof), scored.length ? `已评分作品中占 ${Math.round((hofScored / scored.length) * 100)}%` : ''),
+      stat(`${thisYear} 年看完`, String(doneThisYear.length), latest ? `最近：${latest.title}` : '')
+    ];
+  } else {
+    const best = top[0];
+    kpis = [
+      stat(`${year} 年看完`, String(scoped.length), `${new Set(scoped.map((w) => w.category)).size} 个分类`),
+      stat('平均分', avg === null ? '—' : avg.toFixed(2), `${scored.length} 部有评分`),
+      stat('殿堂', String(hof), hof ? '本年度新入殿堂' : ''),
+      stat('年度最高分', best ? best.title : '—', best ? `${formatScore(best.score)} · ${categoryLabel(best)}` : '', { text: true })
+    ];
+  }
+
+  // ----- Categories: ranked horizontal bars -----
+  const cats = CATEGORIES.map((c, order) => {
+    const list = scoped.filter((w) => w.category === c.id);
+    return { ...c, order, count: list.length, avg: mean(list.filter(hasScore).map((w) => w.score)) };
+  }).sort((a, b) => b.count - a.count || a.order - b.order);
+  const maxCat = Math.max(1, ...cats.map((c) => c.count));
+  const catRows = cats.map((c) => {
+    const width = c.count ? `${((c.count / maxCat) * 100).toFixed(2)}%` : '0';
+    const avgText = c.avg === null ? '' : `均分 ${c.avg.toFixed(1)}`;
+    const aria = `${c.label}：${c.count} 部${avgText ? `，${avgText}` : ''}。在档案中查看`;
+    return `<li><button type="button" class="hbar" data-stats-cat="${c.id}" aria-label="${esc(aria)}">
+      <span class="hbar-label">${esc(c.label)}</span>
+      <span class="hbar-plot"><span class="hbar-fill" style="width:${width}"${c.count ? '' : ' hidden'}></span><span class="hbar-value">${c.count}</span></span>
+      <span class="hbar-sub">${esc(avgText)}</span>
+    </button></li>`;
+  }).join('');
+  const catTable = tableTwin(['分类', '数量', '均分'], cats.map((c) => [c.label, String(c.count), c.avg === null ? '—' : c.avg.toFixed(1)]));
+
+  // ----- Score distribution -----
+  let scoreBody;
+  if (scored.length) {
+    const bins = SCORE_BINS.map((b) => ({ label: b.label, tip: b.tip, value: scored.filter((w) => b.test(w.score)).length }));
+    const firstUsed = Math.max(0, Math.min(bins.findIndex((b) => b.value > 0), SCORE_BINS.length - 5));
+    const shown = bins.slice(firstUsed);
+    scoreBody = columnChart(shown) + tableTwin(['分数段', '数量'], shown.map((b) => [b.tip, String(b.value)]));
+  } else {
+    scoreBody = '<p class="panel-empty">还没有评分</p>';
+  }
+
+  // ----- Completions over time -----
+  let timeTitle;
+  let timeSub;
+  let timeBody;
+  if (all) {
+    const years = statsYears(works).sort();
+    timeTitle = '每年看完';
+    timeSub = '按看完日期统计';
+    if (years.length) {
+      const first = Number(years[0]);
+      const last = Number(years[years.length - 1]);
+      const span = [];
+      for (let y = Math.max(first, last - 14); y <= last; y += 1) span.push(String(y));
+      const data = span.map((y) => ({ label: y, tip: `${y} 年`, value: works.filter((w) => finishedYear(w) === y).length }));
+      timeBody = columnChart(data) + tableTwin(['年份', '数量'], data.map((d) => [d.tip, String(d.value)]));
+    } else {
+      timeBody = '<p class="panel-empty">还没有填写看完日期的作品</p>';
+    }
+  } else {
+    timeTitle = `${year} 年每月看完`;
+    timeSub = '按看完日期统计';
+    const data = Array.from({ length: 12 }, (_, i) => {
+      const mm = String(i + 1).padStart(2, '0');
+      return { label: `${i + 1}`, tip: `${year} 年 ${i + 1} 月`, value: scoped.filter((w) => w.completedAt.slice(5, 7) === mm).length };
+    });
+    timeBody = columnChart(data) + tableTwin(['月份', '数量'], data.map((d) => [d.tip, String(d.value)]));
+  }
+
+  // ----- Top rated -----
+  const topBody = top.length
+    ? `<ol class="toplist">${top.slice(0, 6).map((w, i) => `<li><a href="${workHref(w.id)}" data-work-link="${esc(w.id)}">
+        <span class="toplist-rank">${i + 1}</span>
+        <span class="thumb"><img src="${esc(coverSrc(w))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-cover-id="${esc(w.id)}"></span>
+        <span class="row-text"><strong>${esc(w.title)}</strong><small>${esc(categoryLabel(w))}${w.hallOfFame ? ' · 殿堂' : ''}</small></span>
+        <span class="score">${formatScore(w.score)}</span>
+      </a></li>`).join('')}</ol>`
+    : '<p class="panel-empty">还没有评分</p>';
+
+  // ----- Tags -----
+  const tagCount = new Map();
+  for (const w of scoped) for (const t of w.tags) tagCount.set(t, (tagCount.get(t) || 0) + 1);
+  const tags = [...tagCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-Hans-CN')).slice(0, 18);
+  const tagBody = tags.length
+    ? `<div class="tagcloud">${tags.map(([t, n]) => `<button type="button" class="tag" data-tag="${esc(t)}" aria-label="${esc(`标签 ${t}：${n} 部，在档案中查看`)}">#${esc(t)}<b>${n}</b></button>`).join('')}</div>`
+    : '<p class="panel-empty">还没有标签</p>';
+
+  return `<div class="kpis">${kpis.join('')}</div>
+    <div class="stats-grid">
+      ${panel('分类', '按数量排序 · 点击在档案中查看', `<ul class="hbars">${catRows}</ul>${catTable}`)}
+      ${panel('评分分布', scored.length ? `${scored.length} 部有评分` : '', scoreBody)}
+      ${panel(timeTitle, timeSub, timeBody, { wide: true })}
+      ${panel('评分最高', '同分时殿堂作品在前', topBody)}
+      ${panel('常用标签', '点击在档案中查看', tagBody)}
+    </div>`;
+}
+
+export function statsSubtitle(works, year) {
+  if (year === 'all') return `全部 ${works.length} 部记录`;
+  return `${year} 年看完的作品（按看完日期）`;
+}
+
+/** One shared tooltip for every column in root. */
+export function bindChartTips(root, tip) {
+  const show = (col) => {
+    tip.replaceChildren();
+    const strong = document.createElement('strong');
+    strong.textContent = col.dataset.tipValue || '';
+    const span = document.createElement('span');
+    span.textContent = col.dataset.tipLabel || '';
+    tip.append(strong, span);
+    tip.hidden = false;
+    const bar = col.querySelector('.col-bar').getBoundingClientRect();
+    const box = col.getBoundingClientRect();
+    const tw = tip.offsetWidth;
+    const th = tip.offsetHeight;
+    const anchorY = bar.height > 0 ? bar.top : box.bottom;
+    const x = Math.min(Math.max(8, box.left + box.width / 2 - tw / 2), window.innerWidth - tw - 8);
+    const y = Math.max(8, anchorY - th - 10);
+    tip.style.left = `${x}px`;
+    tip.style.top = `${y}px`;
   };
-}
-
-function buildHeatmapSvg(works, now) {
-  const byDate = new Map();
-  for (const w of works) {
-    const d = w.completedAt || (w.status === 'completed' ? w.updatedAt : '');
-    if (!d) continue;
-    const list = byDate.get(d) || [];
-    list.push(w.title);
-    byDate.set(d, list);
-  }
-
-  const pal = getSvgPalette();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const start = new Date(end);
-  start.setDate(end.getDate() - 52 * 7 + (6 - end.getDay()));
-
-  const cell = 8;
-  const step = 10;
-  const cells = [];
-  const cursor = new Date(start);
-  let week = 0;
-
-  while (cursor <= end) {
-    const dow = cursor.getDay();
-    const key = formatLocalDateKey(cursor);
-    const titles = byDate.get(key) || [];
-    const level = Math.min(titles.length, 4);
-    const tip = titles.length ? `${key}：${titles.join('、')}` : `${key}：无完成记录`;
-    cells.push(
-      `<rect x="${week * step}" y="${dow * step}" width="${cell}" height="${cell}" rx="1.5" fill="${pal.heat[level]}" class="svg-heat-${level}"><title>${escapeHtml(tip)}</title></rect>`
-    );
-    if (dow === 6) week += 1;
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  const svgW = Math.max((week + 1) * step, 520);
-  return `<svg viewBox="0 0 ${svgW} 72" role="img" aria-label="近52周记录热力图">${cells.join('')}</svg>`;
-}
-
-export function renderDashboard(works, activeCategory, { onCategoryToggle }) {
-  const kpiEl = document.getElementById('kpi-strip');
-  const catEl = document.getElementById('chart-categories');
-  const scoreEl = document.getElementById('chart-scores');
-  const actEl = document.getElementById('chart-activity');
-  if (!kpiEl || !catEl || !scoreEl || !actEl) return;
-
-  renderKpiStrip(kpiEl, works);
-  renderCategoryBreakdown(catEl, works, activeCategory, onCategoryToggle);
-  renderScoreHistogram(scoreEl, works);
-
-  const now = new Date();
-  const trend = buildMonthTrendSvg(works, now);
-  actEl.innerHTML = `<div class="svg-box">${trend.svg}</div>
-    <div class="svg-box">${buildHeatmapSvg(works, now)}</div>`;
-
-  const actTitle = document.getElementById('act-insight-title');
-  const actSub = document.getElementById('act-insight-sub');
-  const actFoot = document.getElementById('act-insight-foot');
-  if (actTitle && actSub && actFoot) {
-    actTitle.textContent = trend.last12Total
-      ? `近 12 个月归档 ${trend.last12Total} 部 · ${trend.peakMonth.key} 峰值 ${trend.peakMonth.count} 部`
-      : '近 12 月趋势 & 52 周热力图';
-    actSub.textContent = '按完成日期汇总 · 悬停色块查看当日作品';
-    actFoot.innerHTML = `<span>52-WEEK CADENCE</span><span class="heat-legend" aria-hidden="true">LESS <i class="heat-dot" style="background:var(--heat-0)"></i><i class="heat-dot" style="background:var(--heat-1)"></i><i class="heat-dot" style="background:var(--heat-2)"></i><i class="heat-dot" style="background:var(--heat-3)"></i><i class="heat-dot" style="background:var(--heat-4)"></i> MORE</span>`;
-  }
+  const hide = () => { tip.hidden = true; };
+  root.addEventListener('pointerover', (e) => {
+    const col = e.target.closest?.('.col');
+    if (col && root.contains(col)) show(col);
+  });
+  root.addEventListener('pointerout', (e) => {
+    const col = e.target.closest?.('.col');
+    if (col && !col.contains(e.relatedTarget)) hide();
+  });
+  root.addEventListener('focusin', (e) => {
+    const col = e.target.closest?.('.col');
+    if (col) show(col); else hide();
+  });
+  root.addEventListener('focusout', hide);
+  window.addEventListener('scroll', hide, { passive: true });
 }

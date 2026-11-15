@@ -29,6 +29,12 @@ function createTimeoutSignal(ms) {
   return ctrl.signal;
 }
 
+/** Prefer Bangumi's 400px rendition: sharp enough for posters, far lighter than the original. */
+function bangumiCover(images, fallback = '') {
+  const pick = images?.common || images?.medium || images?.large || fallback || '';
+  return String(pick).replace(/^(https?:\/\/lain\.bgm\.tv)\/pic\//, '$1/r/400/pic/');
+}
+
 async function searchBangumi(query, category) {
   const types = CATEGORY_TO_BGM_TYPES[category] || [1, 2, 4, 6];
   const res = await fetch('https://api.bgm.tv/v0/search/subjects?limit=8', {
@@ -53,8 +59,7 @@ async function searchBangumi(query, category) {
     const title = cn || raw || '未命名';
     const originalTitle = cn && raw && cn !== raw ? raw : '';
     const yearMatch = String(item.date || '').match(/^(\d{4})/);
-    const coverUrl =
-      item.images?.large || item.images?.common || item.images?.medium || item.image || '';
+    const coverUrl = bangumiCover(item.images, item.image);
     return {
       source: 'bangumi',
       sourceId: item.id,
@@ -62,6 +67,7 @@ async function searchBangumi(query, category) {
       originalTitle,
       releaseYear: yearMatch ? Number(yearMatch[1]) : null,
       coverUrl,
+      thumbUrl: item.images?.small || item.images?.grid || coverUrl,
       platform: String(item.platform || '').trim(),
       creator: '',
       progressTotal: null,
@@ -100,7 +106,8 @@ async function searchWikipediaLang(query, lang) {
       title: String(p.title || ''),
       originalTitle: '',
       releaseYear: yr ? Number(yr[1]) : null,
-      coverUrl: p.original?.source || p.thumbnail?.source || '',
+      coverUrl: p.thumbnail?.source || p.original?.source || '',
+      thumbUrl: p.thumbnail?.source || '',
       platform: lang === 'ja' ? 'Wikipedia JA' : '维基百科',
       creator: '',
       progressTotal: null,
@@ -146,7 +153,7 @@ export async function enrichBangumiSubject(subjectId) {
   const progressTotal = totalEps || totalVols || null;
   const unit = totalEps ? '话' : totalVols ? '卷' : '';
   const progressText = progressTotal && unit ? `全 ${progressTotal} ${unit}` : '';
-  const coverUrl = item.images?.large || item.images?.common || item.image || '';
+  const coverUrl = bangumiCover(item.images, item.image);
 
   return { creator, progressTotal, progressText, coverUrl };
 }
