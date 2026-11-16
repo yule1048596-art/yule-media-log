@@ -1783,3 +1783,7 @@ main { position: relative; isolation: isolate; }
 .card.is-launching .cover-glow { opacity: 0 !important; transition: none !important; }
 .card.is-launching .cover,
 .card.is-launching .cover img { transform: none !important; transition: none !important; }
+
+/* While a cover transition runs, the page does not scroll (see lockScroll in app.js) */
+html.is-scroll-locked { overflow: hidden; overscroll-behavior: none; }
+html.is-scroll-locked body { touch-action: none; }

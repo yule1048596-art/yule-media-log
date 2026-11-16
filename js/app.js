@@ -420,13 +420,44 @@ function coverOnPage(id) {
   return null;
 }
 
+/*
+ * Scroll lock for the length of a transition. The animated cover lives in a fixed overlay
+ * whose end position is measured when the new page is captured; scrolling during the
+ * animation would move the real cover away from it, so wheel, touch and keyboard
+ * scrolling are held until the new page is fully in place.
+ */
+const SCROLL_KEYS = new Set([' ', 'PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown']);
+let scrollLocks = 0;
+function preventScroll(e) {
+  e.preventDefault();
+}
+function preventScrollKeys(e) {
+  if (SCROLL_KEYS.has(e.key) && !e.target.closest?.('input, textarea, select, [contenteditable="true"]')) e.preventDefault();
+}
+function lockScroll() {
+  if (scrollLocks++ > 0) return;
+  document.documentElement.classList.add('is-scroll-locked');
+  window.addEventListener('wheel', preventScroll, { passive: false });
+  window.addEventListener('touchmove', preventScroll, { passive: false });
+  window.addEventListener('keydown', preventScrollKeys, true);
+}
+function unlockScroll() {
+  if (scrollLocks === 0 || --scrollLocks > 0) return;
+  document.documentElement.classList.remove('is-scroll-locked');
+  window.removeEventListener('wheel', preventScroll);
+  window.removeEventListener('touchmove', preventScroll);
+  window.removeEventListener('keydown', preventScrollKeys, true);
+}
+
 /**
  * Run a route change as a view transition: the cover `from` (in the current view)
  * morphs into the cover `findTo()` returns in the new view, everything else crossfades.
+ * Scrolling is locked until the transition has finished.
  * Falls back to an instant change without View Transitions or with reduced motion.
  */
 function morph(update, { from = null, findTo = null } = {}) {
   if (!canMorph()) return Promise.resolve(update());
+  lockScroll();
   transitioning = true;
   const card = from?.closest('.card') || null;
   card?.classList.add('is-launching');
@@ -453,6 +484,7 @@ function morph(update, { from = null, findTo = null } = {}) {
     transitioning = false;
     card?.classList.remove('is-launching');
     if (to) to.style.viewTransitionName = '';
+    unlockScroll();
   });
 }
 
