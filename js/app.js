@@ -10,6 +10,8 @@ import { setupEditor, openEditor, isEditorOpen } from './editor.js';
 import { setupSyncDialog, openSyncDialog } from './sync-ui.js';
 
 const VIEW_KEY = 'yuroku_view';
+const DENSITY_KEY = 'yuroku_density';
+const DENSITIES = ['7', '5']; // posters per row on a full-width screen
 const THEME_KEY = 'yuroku_theme';
 const VIEWS = ['wall', 'list', 'diary'];
 const SORT_DEFAULT_DIR = { recent: 'desc', score: 'desc', updated: 'desc', release: 'desc', title: 'asc' };
@@ -29,6 +31,7 @@ const state = {
   filters: defaultFilters(),
   sort: { key: 'recent', dir: 'desc' },
   view: 'wall',
+  density: '7',
   statsYear: 'all'
 };
 
@@ -213,6 +216,8 @@ function renderFilters(resultCount) {
   // Compare trimmed: rewriting the box mid-typing would swallow trailing spaces.
   if (els.q.value.trim() !== f.q) els.q.value = f.q;
   for (const b of els.viewSwitch.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === state.view));
+  els.densitySwitch.hidden = state.view !== 'wall';
+  for (const b of els.densitySwitch.querySelectorAll('[data-density]')) b.setAttribute('aria-pressed', String(b.dataset.density === state.density));
 
   const total = works.length;
   els.resultCount.textContent = resultCount === total ? `共 ${total} 部` : `${total} 部中找到 ${resultCount} 部`;
@@ -227,6 +232,7 @@ function renderArchive() {
   const items = sortWorks(filteredWorks());
   renderIntro();
   renderFilters(items.length);
+  els.archiveView.dataset.density = state.density;
 
   if (!state.ready) {
     els.archiveView.innerHTML = '<div class="empty"><p class="empty-title">没能读取数据</p><p>data/works.json 加载失败，可能是网络问题。</p><button type="button" class="btn" data-action="reload">重新加载</button></div>';
@@ -516,6 +522,14 @@ function setupEvents() {
     renderArchive();
     play(els.archiveView, 'is-switching');
   });
+  els.densitySwitch.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-density]');
+    if (!btn || !DENSITIES.includes(btn.dataset.density) || btn.dataset.density === state.density) return;
+    state.density = btn.dataset.density;
+    writePref(DENSITY_KEY, state.density);
+    renderArchive();
+    play(els.archiveView, 'is-switching');
+  });
 
   // Clear buttons live in the result bar and in the empty state.
   els.pageArchive.addEventListener('click', (e) => {
@@ -672,10 +686,12 @@ async function init() {
   };
   for (const [key, id] of Object.entries(ids)) els[key] = document.getElementById(id);
   els.viewSwitch = document.querySelector('.view-switch');
+  els.densitySwitch = document.getElementById('density-switch');
   els.filtersTop = document.querySelector('.filters');
   els.themeMeta = document.querySelector('meta[name="theme-color"]');
 
   state.view = readPref(VIEW_KEY, 'wall', VIEWS);
+  state.density = readPref(DENSITY_KEY, '7', DENSITIES);
   hydrateIcons(document);
   setupTheme();
   setupEvents();

@@ -22,25 +22,25 @@
     Cache busting: GitHub Pages lets browsers reuse files for 10 minutes, so after
     changing any CSS/JS file bump every "v=" below (stylesheets, import map, entry).
   -->
-  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116b">
-  <link rel="stylesheet" href="styles/components.css?v=20261116b">
+  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116c">
+  <link rel="stylesheet" href="styles/components.css?v=20261116c">
   <script type="importmap">
     {
       "imports": {
-        "./js/app.js": "./js/app.js?v=20261116b",
-        "./js/charts.js": "./js/charts.js?v=20261116b",
-        "./js/editor.js": "./js/editor.js?v=20261116b",
-        "./js/icons.js": "./js/icons.js?v=20261116b",
-        "./js/markdown.js": "./js/markdown.js?v=20261116b",
-        "./js/meta.js": "./js/meta.js?v=20261116b",
-        "./js/search-api.js": "./js/search-api.js?v=20261116b",
-        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116b",
-        "./js/sync.js": "./js/sync.js?v=20261116b",
-        "./js/views.js": "./js/views.js?v=20261116b"
+        "./js/app.js": "./js/app.js?v=20261116c",
+        "./js/charts.js": "./js/charts.js?v=20261116c",
+        "./js/editor.js": "./js/editor.js?v=20261116c",
+        "./js/icons.js": "./js/icons.js?v=20261116c",
+        "./js/markdown.js": "./js/markdown.js?v=20261116c",
+        "./js/meta.js": "./js/meta.js?v=20261116c",
+        "./js/search-api.js": "./js/search-api.js?v=20261116c",
+        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116c",
+        "./js/sync.js": "./js/sync.js?v=20261116c",
+        "./js/views.js": "./js/views.js?v=20261116c"
       }
     }
   </script>
-  <script type="module" src="js/app.js?v=20261116b"></script>
+  <script type="module" src="js/app.js?v=20261116c"></script>
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">跳到正文</a>
@@ -138,10 +138,16 @@
                   <span data-icon="ribbon"></span>殿堂
                 </button>
               </div>
-              <div class="view-switch" role="group" aria-label="视图">
-                <button type="button" data-view="wall" aria-pressed="true" title="海报墙"><span data-icon="grid"></span><span class="visually-hidden">海报墙</span></button>
-                <button type="button" data-view="list" aria-pressed="false" title="列表"><span data-icon="list"></span><span class="visually-hidden">列表</span></button>
-                <button type="button" data-view="diary" aria-pressed="false" title="日记"><span data-icon="calendar"></span><span class="visually-hidden">日记</span></button>
+              <div class="toolbar-views">
+                <div class="density-switch" id="density-switch" role="group" aria-label="海报墙每行作品数" title="海报墙每行显示几部（窗口变窄时会自动减少）">
+                  <button type="button" data-density="5" aria-pressed="false" aria-label="每行 5 部">5 列</button>
+                  <button type="button" data-density="7" aria-pressed="true" aria-label="每行 7 部">7 列</button>
+                </div>
+                <div class="view-switch" role="group" aria-label="视图">
+                  <button type="button" data-view="wall" aria-pressed="true" title="海报墙"><span data-icon="grid"></span><span class="visually-hidden">海报墙</span></button>
+                  <button type="button" data-view="list" aria-pressed="false" title="列表"><span data-icon="list"></span><span class="visually-hidden">列表</span></button>
+                  <button type="button" data-view="diary" aria-pressed="false" title="日记"><span data-icon="calendar"></span><span class="visually-hidden">日记</span></button>
+                </div>
               </div>
             </div>
           </div>
