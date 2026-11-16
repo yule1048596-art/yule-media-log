@@ -2,7 +2,7 @@
 
 import { CATEGORIES, NOVEL_SUBTYPES, esc, mean, normalizeText, finishedYear, formatDate } from './meta.js';
 import { icon, hydrateIcons } from './icons.js';
-import { fallbackCover } from './markdown.js';
+import { fallbackCover, coverSrc } from './markdown.js';
 import { loadInitialData, saveDraft } from './sync.js';
 import { renderWall, renderList, renderDiary, diaryOrder, renderDetail, workHref } from './views.js';
 import { renderStats, statsYears, statsSubtitle, bindChartTips } from './charts.js';
@@ -299,8 +299,28 @@ function updateSyncDot() {
   els.btnSync.title = label;
 }
 
+/** The most recent covers, blurred into a colour field behind the page header. */
+let ambientKey = '';
+function renderAmbient() {
+  const works = state.data.works;
+  const finished = works
+    .filter((w) => w.status === 'completed' && w.completedAt)
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  const used = new Set(finished);
+  const others = works.filter((w) => !used.has(w)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  const srcs = [...finished, ...others].slice(0, 6).map(coverSrc);
+  const key = srcs.join('|');
+  if (key === ambientKey) return;
+  ambientKey = key;
+  els.ambient.innerHTML = srcs.length
+    ? `<div class="ambient-strip">${srcs.map((s) => `<img src="${esc(s)}" alt="" decoding="async" referrerpolicy="no-referrer">`).join('')}</div>`
+    : '';
+  primeImages(els.ambient);
+}
+
 function renderAll() {
   renderArchive();
+  renderAmbient();
   if (state.page === 'stats') renderStatsPage();
   if (state.detailId && els.detail.open) {
     if (findWork(state.detailId)) renderDetailInto(state.detailId);
@@ -648,7 +668,7 @@ async function init() {
     footerMeta: 'footer-meta', syncDot: 'sync-dot', btnSync: 'btn-sync', btnTheme: 'btn-theme',
     btnNew: 'btn-new', detail: 'detail-dialog', detailBody: 'detail-body', detailPrev: 'detail-prev',
     detailNext: 'detail-next', detailPos: 'detail-pos', detailEdit: 'detail-edit', detailCopy: 'detail-copy',
-    chartTip: 'chart-tip', toast: 'toast'
+    chartTip: 'chart-tip', toast: 'toast', ambient: 'ambient'
   };
   for (const [key, id] of Object.entries(ids)) els[key] = document.getElementById(id);
   els.viewSwitch = document.querySelector('.view-switch');
@@ -705,6 +725,7 @@ async function init() {
   state.ready = remoteOk || isDirty || pending || data.works.length > 0;
   updateSyncDot();
   renderFooter();
+  renderAmbient();
   applyRoute({ initial: true });
   if (state.page === 'archive' && state.view === 'wall') play(els.archiveView, 'is-entering');
   if (!state.ready) toast('没能读取 data/works.json', 'error');

@@ -8,6 +8,9 @@
   --font-ja: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo",
     "Noto Sans CJK JP", var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Display serif (宋体 / 明朝) for titles; body text and numbers stay in the sans */
+  --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC",
+    "Source Han Serif CN", "Hiragino Mincho ProN", "Yu Mincho", serif;
 
   /* Surfaces & ink */
   --bg: #f6f5f2;

@@ -16,6 +16,11 @@ function coverImg(work, { eager = false } = {}) {
     `referrerpolicy="no-referrer" data-cover-id="${esc(work.id)}">`;
 }
 
+/** A blurred copy of the cover that glows in the cover's own colours behind it. */
+function glowImg(work) {
+  return `<img class="cover-glow" src="${esc(coverSrc(work))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`;
+}
+
 function scoreHtml(work) {
   if (hasScore(work)) return `<span class="score">${formatScore(work.score)}</span>`;
   return '<span class="score-none">未评分</span>';
@@ -41,7 +46,10 @@ function cardHtml(work, index) {
 
   return `<li class="card" style="--i:${Math.min(index, 24)}">
     <a class="card-link" href="${workHref(work.id)}" data-work-link="${esc(work.id)}">
-      <div class="cover">${coverImg(work, { eager: index < 12 })}${ribbon}${status}${progress}${quote}</div>
+      <div class="cover-wrap">
+        ${glowImg(work)}
+        <div class="cover">${coverImg(work, { eager: index < 12 })}${ribbon}${status}${progress}${quote}</div>
+      </div>
       <div class="card-text">
         <h3 class="card-title">${esc(work.title)}${hof}</h3>
         <p class="card-meta"><span>${esc(meta)}</span>${scoreHtml(work)}</p>
@@ -201,7 +209,7 @@ export function renderDetail(work) {
   return `<article class="detail">
     <div class="detail-wash" aria-hidden="true"><img src="${esc(coverSrc(work))}" alt="" referrerpolicy="no-referrer"></div>
     <div class="detail-hero">
-      <div class="detail-cover"><div class="cover">${coverImg(work, { eager: true })}</div></div>
+      <div class="detail-cover cover-wrap">${glowImg(work)}<div class="cover">${coverImg(work, { eager: true })}</div></div>
       <div class="detail-head">
         <p class="detail-kicker">${esc(kicker)}</p>
         <h2 class="detail-title" id="detail-title">${esc(work.title)}</h2>
