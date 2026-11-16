@@ -1737,3 +1737,49 @@ main { position: relative; isolation: isolate; }
   .pager-empty,
   .pager-arrow { display: none; }
 }
+
+/* ==========================================================================
+   Shared-element transition: a cover in a list flies into the work page
+   (View Transitions; browsers without it simply switch pages)
+   ========================================================================== */
+.page-work .detail-cover .cover { view-transition-name: work-cover; }
+.page-work .detail-head { view-transition-name: work-head; }
+
+::view-transition-group(work-cover) {
+  animation-duration: 0.56s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  /* A gentle spring (~1% settle), sampled from a damped oscillator */
+  ::view-transition-group(work-cover) {
+    animation-timing-function: linear(0, 0.034 3.6%, 0.116 7.1%, 0.223 10.7%, 0.339 14.3%, 0.454 17.9%,
+      0.56 21.4%, 0.655 25%, 0.737 28.6%, 0.805 32.1%, 0.86 35.7%, 0.904 39.3%, 0.937 42.9%, 0.962 46.4%,
+      0.98 50%, 0.993 53.6%, 1.002 57.1%, 1.007 60.7%, 1.01 64.3%, 1.011 67.9%, 1.011 71.4%, 1.01 75%,
+      1.009 78.6%, 1.008 82.1%, 1.007 85.7%, 1.006 89.3%, 1.004 92.9%, 1.003 96.4%, 1);
+  }
+}
+/* Both ends show the same artwork: a quick crossfade hides badges and size differences */
+::view-transition-old(work-cover),
+::view-transition-new(work-cover) {
+  height: 100%;
+  object-fit: cover;
+  animation-duration: 0.3s;
+}
+
+/* The page around the cover crossfades; the title block rises in as the cover lands */
+::view-transition-old(root) { animation-duration: 0.24s; }
+::view-transition-new(root) { animation-duration: 0.42s; }
+::view-transition-new(work-head):only-child {
+  animation: vt-rise 0.52s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+::view-transition-old(work-head):only-child {
+  animation: vt-fade-out 0.2s ease both;
+}
+@keyframes vt-rise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes vt-fade-out { to { opacity: 0; } }
+
+/* The clicked card drops its hover dressing so the snapshot is just the artwork */
+.card.is-launching .cover-quote,
+.card.is-launching .cover-glow { opacity: 0 !important; transition: none !important; }
+.card.is-launching .cover,
+.card.is-launching .cover img { transform: none !important; transition: none !important; }

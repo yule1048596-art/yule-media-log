@@ -349,7 +349,7 @@ function showPage(page) {
   if (from !== page && scrollMemory[from] !== undefined) scrollMemory[from] = window.scrollY;
   state.page = page;
   for (const [name, key] of Object.entries(PAGES)) els[key].hidden = name !== page;
-  if (from !== page) play(els[PAGES[page]], 'is-switching');
+  if (from !== page && !transitioning) play(els[PAGES[page]], 'is-switching');
   const navTarget = page === 'stats' ? 'stats' : 'archive';
   for (const a of document.querySelectorAll('[data-nav]')) {
     if (a.dataset.nav === navTarget) a.setAttribute('aria-current', 'page');
@@ -363,6 +363,109 @@ function showPage(page) {
     renderArchive();
   }
   return from;
+}
+
+// ---------- History & cover transitions ----------
+
+let lastHash = location.hash;
+let routeWaiters = [];
+
+/** Change the URL ourselves; the matching hashchange/popstate is then ignored. */
+function setHash(hash, { push = false } = {}) {
+  history[push ? 'pushState' : 'replaceState'](null, '', hash);
+  lastHash = location.hash;
+}
+
+/** Back/forward buttons and plain links: route once per real URL change. */
+function onLocationChange() {
+  if (location.hash === lastHash) return;
+  lastHash = location.hash;
+  applyRoute();
+  const waiters = routeWaiters;
+  routeWaiters = [];
+  for (const resolve of waiters) resolve();
+}
+
+const VT_COVER = 'work-cover';
+const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+let transitioning = false;
+
+function canMorph() {
+  return typeof document.startViewTransition === 'function' && !reducedMotion?.matches && document.visibilityState === 'visible';
+}
+
+function inViewport(el) {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+}
+
+/** Resolve once an image can be painted (or after a short timeout), so snapshots never show an empty frame. */
+function imageReady(img, timeout = 400) {
+  if (!img) return Promise.resolve();
+  img.classList.remove('is-pending');
+  if (img.complete && img.naturalWidth) return Promise.resolve();
+  const ready = typeof img.decode === 'function'
+    ? img.decode().catch(() => {})
+    : new Promise((resolve) => img.addEventListener('load', resolve, { once: true }));
+  return Promise.race([ready, new Promise((resolve) => setTimeout(resolve, timeout))]);
+}
+
+/** The cover (or list thumbnail) of a work on the page that is showing now. */
+function coverOnPage(id) {
+  const page = els[PAGES[state.page]];
+  if (!page || page.hidden) return null;
+  for (const link of page.querySelectorAll('a[data-work-link]')) {
+    if (link.dataset.workLink === id) return link.querySelector('.cover, .thumb');
+  }
+  return null;
+}
+
+/**
+ * Run a route change as a view transition: the cover `from` (in the current view)
+ * morphs into the cover `findTo()` returns in the new view, everything else crossfades.
+ * Falls back to an instant change without View Transitions or with reduced motion.
+ */
+function morph(update, { from = null, findTo = null } = {}) {
+  if (!canMorph()) return Promise.resolve(update());
+  transitioning = true;
+  const card = from?.closest('.card') || null;
+  card?.classList.add('is-launching');
+  if (from) from.style.viewTransitionName = VT_COVER;
+  let to = null;
+  const vt = document.startViewTransition(async () => {
+    if (from) from.style.viewTransitionName = '';
+    await update();
+    to = findTo ? findTo() : null;
+    if (to && !inViewport(to)) to = null;
+    if (to) {
+      to.style.viewTransitionName = VT_COVER;
+      await imageReady(to.querySelector('img'));
+    }
+  });
+  // Never leave the page frozen: if the old view cannot be captured quickly (no frames,
+  // e.g. an occluded window), skip straight to the new page; and cap the whole run.
+  const stall = setTimeout(() => vt.skipTransition?.(), 350);
+  vt.ready.then(() => clearTimeout(stall), () => clearTimeout(stall));
+  const guard = setTimeout(() => vt.skipTransition?.(), 1500);
+  return vt.finished.catch(() => {}).finally(() => {
+    clearTimeout(stall);
+    clearTimeout(guard);
+    transitioning = false;
+    card?.classList.remove('is-launching');
+    if (to) to.style.viewTransitionName = '';
+  });
+}
+
+const detailCover = () => els.workBody.querySelector('.detail-cover .cover');
+
+/** Open a work from a link in a list: its cover flies into the work page. */
+function openWork(id, link) {
+  cameFromApp = true;
+  const from = link?.querySelector('.cover, .thumb') || null;
+  morph(() => {
+    setHash(workHref(id), { push: true });
+    applyRoute();
+  }, { from: from && inViewport(from) ? from : null, findTo: detailCover });
 }
 
 // ---------- Work page ----------
@@ -393,27 +496,36 @@ function stepWork(delta) {
   const next = ids[i + delta];
   if (i === -1 || !next) return;
   // Replace, so "返回" still leads to the list rather than through every neighbour.
-  history.replaceState(null, '', workHref(next));
-  state.workId = next;
-  renderWorkInto(next);
-  renderAmbient();
-  window.scrollTo(0, 0);
+  morph(() => {
+    setHash(workHref(next));
+    state.workId = next;
+    renderWorkInto(next);
+    renderAmbient();
+    window.scrollTo(0, 0);
+  }, { findTo: detailCover });
 }
 
-/** Back to wherever the work page was opened from. */
+/** Back to wherever the work page was opened from; the cover flies back into the list. */
 function goBack() {
-  if (cameFromApp) {
-    history.back();
-    return;
-  }
-  history.replaceState(null, '', returnPage === 'stats' ? '#/stats' : '#/');
-  applyRoute();
+  const id = state.workId;
+  const update = () => new Promise((resolve) => {
+    if (cameFromApp) {
+      routeWaiters.push(resolve);
+      history.back();
+      setTimeout(resolve, 800); // in case the browser reports no URL change
+    } else {
+      setHash(returnPage === 'stats' ? '#/stats' : '#/');
+      applyRoute();
+      resolve();
+    }
+  });
+  morph(update, { from: detailCover(), findTo: () => coverOnPage(id) });
 }
 
 /** Leave a work page that can no longer be shown (deleted, or missing). */
 function leaveWork() {
   cameFromApp = false;
-  history.replaceState(null, '', returnPage === 'stats' ? '#/stats' : '#/');
+  setHash(returnPage === 'stats' ? '#/stats' : '#/');
   applyRoute();
 }
 
@@ -440,7 +552,7 @@ function applyRoute({ initial = false } = {}) {
   const route = parseHash();
   if (route.page === 'work') {
     if (!findWork(route.workId)) {
-      history.replaceState(null, '', '#/');
+      setHash('#/');
       cameFromApp = false;
       state.workId = null;
       showPage('archive');
@@ -469,7 +581,7 @@ function goToArchive(filters) {
   state.filters = { ...defaultFilters(), ...filters };
   cameFromApp = false;
   state.workId = null;
-  if (location.hash !== '#/' && location.hash !== '') history.replaceState(null, '', '#/');
+  if (location.hash !== '#/' && location.hash !== '') setHash('#/');
   showPage('archive');
   renderAmbient();
   els.filtersTop.scrollIntoView({ block: 'start' });
@@ -587,10 +699,14 @@ function setupEvents() {
     }
   });
 
-  // Any in-app link to a work: remember that "返回" can simply go back in history.
+  // In-app links to a work open it with the cover transition (new-tab clicks stay normal).
   document.addEventListener('click', (e) => {
     const link = e.target.closest?.('a[data-work-link]');
-    if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) cameFromApp = true;
+    if (link && !e.defaultPrevented && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+      e.preventDefault();
+      openWork(link.dataset.workLink, link);
+      return;
+    }
     const spoiler = e.target.closest?.('.spoiler');
     if (spoiler) {
       const open = spoiler.getAttribute('aria-pressed') === 'true';
@@ -674,8 +790,8 @@ function setupEvents() {
     if (e.key === '/') {
       e.preventDefault();
       if (state.page !== 'archive') {
-        location.hash = '#/';
-        showPage('archive');
+        setHash('#/', { push: true });
+        applyRoute();
       }
       els.q.focus();
     } else if (e.key === 'n' || e.key === 'N') {
@@ -684,7 +800,8 @@ function setupEvents() {
     }
   });
 
-  window.addEventListener('hashchange', () => applyRoute());
+  window.addEventListener('hashchange', onLocationChange);
+  window.addEventListener('popstate', onLocationChange);
 }
 
 // ---------- Boot ----------
