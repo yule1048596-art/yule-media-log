@@ -4,9 +4,9 @@ import { CATEGORIES, NOVEL_SUBTYPES, esc, mean, normalizeText, finishedYear, for
 import { icon, hydrateIcons } from './icons.js';
 import { fallbackCover, coverSrc } from './markdown.js';
 import { loadInitialData, saveDraft } from './sync.js';
-import { renderWall, renderList, renderDiary, diaryOrder, renderDetail, workHref } from './views.js';
+import { renderWall, renderList, renderDiary, diaryOrder, renderWorkPage, workHref } from './views.js';
 import { renderStats, statsYears, statsSubtitle, bindChartTips } from './charts.js';
-import { setupEditor, openEditor, isEditorOpen } from './editor.js';
+import { setupEditor, openEditor } from './editor.js';
 import { setupSyncDialog, openSyncDialog } from './sync-ui.js';
 
 const VIEW_KEY = 'yuroku_view';
@@ -27,7 +27,7 @@ const state = {
   conflict: false,
   baseSha: '', // git blob sha of the remote works.json the local data derives from
   page: 'archive',
-  detailId: null,
+  workId: null,
   filters: defaultFilters(),
   sort: { key: 'recent', dir: 'desc' },
   view: 'wall',
@@ -36,7 +36,6 @@ const state = {
 };
 
 const els = {};
-let detailFromApp = false;
 
 function readPref(key, fallback, allowed) {
   try {
@@ -135,7 +134,7 @@ function sortWorks(list) {
   });
 }
 
-/** Ids in the order they appear on screen (drives prev/next in the detail). */
+/** Ids in the order they appear on screen (drives prev/next on a work page). */
 function orderedIds() {
   const items = sortWorks(filteredWorks());
   return (state.view === 'diary' ? diaryOrder(items) : items).map((w) => w.id);
@@ -305,16 +304,25 @@ function updateSyncDot() {
   els.btnSync.title = label;
 }
 
-/** The most recent covers, blurred into a colour field behind the page header. */
+/**
+ * Colour field behind the page header: the current work's cover on a work page,
+ * otherwise the most recent covers.
+ */
 let ambientKey = '';
 function renderAmbient() {
-  const works = state.data.works;
-  const finished = works
-    .filter((w) => w.status === 'completed' && w.completedAt)
-    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
-  const used = new Set(finished);
-  const others = works.filter((w) => !used.has(w)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-  const srcs = [...finished, ...others].slice(0, 6).map(coverSrc);
+  let srcs;
+  const current = state.page === 'work' ? findWork(state.workId) : null;
+  if (current) {
+    srcs = [coverSrc(current)];
+  } else {
+    const works = state.data.works;
+    const finished = works
+      .filter((w) => w.status === 'completed' && w.completedAt)
+      .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+    const used = new Set(finished);
+    const others = works.filter((w) => !used.has(w)).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    srcs = [...finished, ...others].slice(0, 6).map(coverSrc);
+  }
   const key = srcs.join('|');
   if (key === ambientKey) return;
   ambientKey = key;
@@ -326,86 +334,96 @@ function renderAmbient() {
 
 function renderAll() {
   renderArchive();
-  renderAmbient();
   if (state.page === 'stats') renderStatsPage();
-  if (state.detailId && els.detail.open) {
-    if (findWork(state.detailId)) renderDetailInto(state.detailId);
-    else closeDetail();
-  }
+  if (state.page === 'work' && !renderWorkInto(state.workId)) leaveWork();
+  renderAmbient();
   updateSyncDot();
   renderFooter();
 }
 
+const PAGES = { archive: 'pageArchive', stats: 'pageStats', work: 'pageWork' };
+const scrollMemory = { archive: 0, stats: 0 };
+
 function showPage(page) {
-  const changed = state.page !== page;
+  const from = state.page;
+  if (from !== page && scrollMemory[from] !== undefined) scrollMemory[from] = window.scrollY;
   state.page = page;
-  els.pageArchive.hidden = page !== 'archive';
-  els.pageStats.hidden = page !== 'stats';
-  if (changed) play(page === 'stats' ? els.pageStats : els.pageArchive, 'is-switching');
+  for (const [name, key] of Object.entries(PAGES)) els[key].hidden = name !== page;
+  if (from !== page) play(els[PAGES[page]], 'is-switching');
+  const navTarget = page === 'stats' ? 'stats' : 'archive';
   for (const a of document.querySelectorAll('[data-nav]')) {
-    if (a.dataset.nav === page) a.setAttribute('aria-current', 'page');
+    if (a.dataset.nav === navTarget) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  document.title = page === 'stats' ? '统计 · 余録' : '余録 · 书影游记录';
-  if (page === 'stats') renderStatsPage();
-  else renderArchive();
+  if (page === 'stats') {
+    document.title = '统计 · 余録';
+    renderStatsPage();
+  } else if (page === 'archive') {
+    document.title = '余録 · 书影游记录';
+    renderArchive();
+  }
+  return from;
 }
 
-// ---------- Detail ----------
+// ---------- Work page ----------
 
-function renderDetailInto(id) {
+let cameFromApp = false; // the work page was opened from a link inside the site
+let returnPage = 'archive'; // where "返回" leads when there is no in-app history
+
+function renderWorkInto(id) {
   const work = findWork(id);
-  if (!work) return;
-  els.detailBody.innerHTML = renderDetail(work);
-  primeImages(els.detailBody);
+  if (!work) return false;
   const ids = orderedIds();
   const i = ids.indexOf(id);
-  els.detailPrev.disabled = i <= 0;
-  els.detailNext.disabled = i === -1 || i >= ids.length - 1;
-  els.detailPos.textContent = i === -1 ? '' : `${i + 1} / ${ids.length}`;
+  els.workBody.innerHTML = renderWorkPage(work, {
+    prev: i > 0 ? findWork(ids[i - 1]) : null,
+    next: i !== -1 && i < ids.length - 1 ? findWork(ids[i + 1]) : null,
+    pos: i === -1 ? 0 : i + 1,
+    total: ids.length,
+    backLabel: returnPage === 'stats' ? '统计' : '档案'
+  });
+  primeImages(els.workBody);
+  document.title = `${work.title} · 余録`;
+  return true;
 }
 
-function openDetail(id) {
-  state.detailId = id;
-  renderDetailInto(id);
-  els.detailBody.scrollTop = 0;
-  if (!els.detail.open) {
-    els.detail.showModal();
-    els.detail.querySelector('[data-close]').focus({ preventScroll: true });
-  }
-}
-
-function stepDetail(delta) {
+function stepWork(delta) {
   const ids = orderedIds();
-  const i = ids.indexOf(state.detailId);
+  const i = ids.indexOf(state.workId);
   const next = ids[i + delta];
   if (i === -1 || !next) return;
+  // Replace, so "返回" still leads to the list rather than through every neighbour.
   history.replaceState(null, '', workHref(next));
-  openDetail(next);
+  state.workId = next;
+  renderWorkInto(next);
+  renderAmbient();
+  window.scrollTo(0, 0);
 }
 
-/** The URL already moved on (back button, filters): just close the dialog. */
-function closeDetailSilently() {
-  state.detailId = null;
-  detailFromApp = false;
-  if (els.detail.open) els.detail.close();
-}
-
-/** The user closed the detail: leave the #/w/… URL as well. */
-function leaveDetailRoute() {
-  state.detailId = null;
-  if (!parseHash().detailId) return;
-  if (detailFromApp) {
-    detailFromApp = false;
+/** Back to wherever the work page was opened from. */
+function goBack() {
+  if (cameFromApp) {
     history.back();
-  } else {
-    history.replaceState(null, '', state.page === 'stats' ? '#/stats' : '#/');
+    return;
   }
+  history.replaceState(null, '', returnPage === 'stats' ? '#/stats' : '#/');
+  applyRoute();
 }
 
-function closeDetail() {
-  if (els.detail.open) els.detail.close();
-  leaveDetailRoute();
+/** Leave a work page that can no longer be shown (deleted, or missing). */
+function leaveWork() {
+  cameFromApp = false;
+  history.replaceState(null, '', returnPage === 'stats' ? '#/stats' : '#/');
+  applyRoute();
+}
+
+async function copyWorkLink() {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    toast('链接已复制');
+  } catch {
+    toast('复制失败，请直接复制地址栏里的链接', 'error');
+  }
 }
 
 function parseHash() {
@@ -413,39 +431,47 @@ function parseHash() {
   if (raw.startsWith('w/')) {
     let id = raw.slice(2);
     try { id = decodeURIComponent(id); } catch { /* keep raw */ }
-    return { page: null, detailId: id };
+    return { page: 'work', workId: id };
   }
-  return { page: raw === 'stats' ? 'stats' : 'archive', detailId: null };
+  return { page: raw === 'stats' ? 'stats' : 'archive', workId: null };
 }
 
 function applyRoute({ initial = false } = {}) {
   const route = parseHash();
-  if (route.detailId) {
-    if (initial) showPage('archive');
-    if (!findWork(route.detailId)) {
+  if (route.page === 'work') {
+    if (!findWork(route.workId)) {
       history.replaceState(null, '', '#/');
-      closeDetailSilently();
+      cameFromApp = false;
+      state.workId = null;
       showPage('archive');
       toast('找不到这条记录', 'error');
       return;
     }
-    openDetail(route.detailId);
+    if (state.page !== 'work') returnPage = initial ? 'archive' : state.page;
+    state.workId = route.workId;
+    showPage('work');
+    renderWorkInto(route.workId);
+    renderAmbient();
+    window.scrollTo(0, 0);
     return;
   }
-  closeDetailSilently();
-  const changed = state.page !== route.page;
-  showPage(route.page);
-  if (changed && !initial) window.scrollTo(0, 0);
+  cameFromApp = false;
+  state.workId = null;
+  const from = showPage(route.page);
+  renderAmbient();
+  if (initial) return;
+  if (from === 'work') window.scrollTo(0, scrollMemory[route.page] || 0);
+  else if (from !== route.page) window.scrollTo(0, 0);
 }
 
-/** Leave a detail route and show the archive with new filters. */
+/** Show the archive with new filters (from a tag or a stats chart). */
 function goToArchive(filters) {
   state.filters = { ...defaultFilters(), ...filters };
-  if (location.hash !== '#/' && location.hash !== '') {
-    history.replaceState(null, '', '#/');
-  }
-  closeDetailSilently();
+  cameFromApp = false;
+  state.workId = null;
+  if (location.hash !== '#/' && location.hash !== '') history.replaceState(null, '', '#/');
   showPage('archive');
+  renderAmbient();
   els.filtersTop.scrollIntoView({ block: 'start' });
 }
 
@@ -561,10 +587,10 @@ function setupEvents() {
     }
   });
 
-  // Any in-app link to a work: remember that "back" should close the detail.
+  // Any in-app link to a work: remember that "返回" can simply go back in history.
   document.addEventListener('click', (e) => {
     const link = e.target.closest?.('a[data-work-link]');
-    if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) detailFromApp = true;
+    if (link && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) cameFromApp = true;
     const spoiler = e.target.closest?.('.spoiler');
     if (spoiler) {
       const open = spoiler.getAttribute('aria-pressed') === 'true';
@@ -589,34 +615,26 @@ function setupEvents() {
     if (tag) goToArchive({ tag: tag.dataset.tag, year: state.statsYear === 'all' ? 'all' : state.statsYear });
   });
 
-  // Detail dialog
-  els.detailPrev.addEventListener('click', () => stepDetail(-1));
-  els.detailNext.addEventListener('click', () => stepDetail(1));
-  els.detail.querySelector('[data-close]').addEventListener('click', closeDetail);
-  els.detailEdit.addEventListener('click', () => {
-    const work = findWork(state.detailId);
-    if (work) startEditor(work);
-  });
-  els.detailCopy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(location.href);
-      toast('链接已复制');
-    } catch {
-      toast('复制失败，请直接复制地址栏里的链接', 'error');
+  // Work page: back, neighbours, copy link, edit, tags
+  els.pageWork.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]');
+    if (action) {
+      const work = findWork(state.workId);
+      if (action.dataset.action === 'back') goBack();
+      else if (action.dataset.action === 'prev') stepWork(-1);
+      else if (action.dataset.action === 'next') stepWork(1);
+      else if (action.dataset.action === 'copy') copyWorkLink();
+      else if (action.dataset.action === 'edit' && work) startEditor(work);
+      return;
     }
-  });
-  els.detailBody.addEventListener('click', (e) => {
+    const step = e.target.closest('[data-work-step]');
+    if (step && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && e.button === 0) {
+      e.preventDefault();
+      stepWork(Number(step.dataset.workStep));
+      return;
+    }
     const tag = e.target.closest('[data-tag]');
     if (tag) goToArchive({ tag: tag.dataset.tag });
-  });
-  let downOnBackdrop = false;
-  els.detail.addEventListener('pointerdown', (e) => { downOnBackdrop = e.target === els.detail; });
-  els.detail.addEventListener('click', (e) => {
-    if (e.target === els.detail && downOnBackdrop) closeDetail();
-  });
-  // Esc closes the dialog natively; sync the URL unless closeDetail() already did.
-  els.detail.addEventListener('close', () => {
-    if (state.detailId !== null) leaveDetailRoute();
   });
 
   // Covers fade in when they arrive instead of popping in.
@@ -634,7 +652,6 @@ function setupEvents() {
   document.addEventListener('error', (e) => {
     const img = e.target;
     if (!(img instanceof HTMLImageElement)) return;
-    if (img.closest('.detail-wash')) { img.remove(); return; }
     const id = img.dataset.coverId;
     if (!id || img.dataset.fallback) {
       img.classList.remove('is-pending');
@@ -648,13 +665,12 @@ function setupEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
     const typing = e.target.closest?.('input, textarea, select, [contenteditable="true"]');
-    if (els.detail.open && !isEditorOpen()) {
-      if (typing) return;
-      if (e.key === 'ArrowLeft') { e.preventDefault(); stepDetail(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); stepDetail(1); }
-      return;
-    }
     if (typing || document.querySelector('dialog[open]')) return;
+    if (state.page === 'work') {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); stepWork(-1); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); stepWork(1); return; }
+      if (e.key === 'Escape') { e.preventDefault(); goBack(); return; }
+    }
     if (e.key === '/') {
       e.preventDefault();
       if (state.page !== 'archive') {
@@ -680,8 +696,7 @@ async function init() {
     fSort: 'f-sort', fHof: 'f-hof', resultCount: 'result-count', activeFilters: 'active-filters',
     archiveView: 'archive-view', statsYears: 'stats-years', statsSub: 'stats-sub', statsBody: 'stats-body',
     footerMeta: 'footer-meta', syncDot: 'sync-dot', btnSync: 'btn-sync', btnTheme: 'btn-theme',
-    btnNew: 'btn-new', detail: 'detail-dialog', detailBody: 'detail-body', detailPrev: 'detail-prev',
-    detailNext: 'detail-next', detailPos: 'detail-pos', detailEdit: 'detail-edit', detailCopy: 'detail-copy',
+    btnNew: 'btn-new', pageWork: 'page-work', workBody: 'work-body',
     chartTip: 'chart-tip', toast: 'toast', ambient: 'ambient'
   };
   for (const [key, id] of Object.entries(ids)) els[key] = document.getElementById(id);
@@ -690,6 +705,7 @@ async function init() {
   els.filtersTop = document.querySelector('.filters');
   els.themeMeta = document.querySelector('meta[name="theme-color"]');
 
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   state.view = readPref(VIEW_KEY, 'wall', VIEWS);
   state.density = readPref(DENSITY_KEY, '7', DENSITIES);
   hydrateIcons(document);
@@ -709,11 +725,8 @@ async function init() {
     onDelete(id) {
       const work = findWork(id);
       state.data.works = state.data.works.filter((w) => w.id !== id);
-      if (els.detail.open && state.detailId === id) {
-        // Replace (not go back): the deleted work's URL must not stay current.
-        detailFromApp = false;
-        closeDetail();
-      }
+      // Replace (not go back): the deleted work's URL must not stay current.
+      if (state.page === 'work' && state.workId === id) leaveWork();
       commit(work ? `已删除「${work.title}」` : '已删除');
     }
   });

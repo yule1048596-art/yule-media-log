@@ -171,9 +171,41 @@ export function renderDiary(items) {
   return `<div class="diary">${blocks.join('')}</div>`;
 }
 
-// ---------- Detail ----------
+// ---------- Work page ----------
 
-export function renderDetail(work) {
+function pagerCard(work, step) {
+  if (!work) return '<span class="pager-empty"></span>';
+  const label = step < 0 ? '上一部' : '下一部';
+  return `<a class="pager-card${step > 0 ? ' is-next' : ''}" href="${workHref(work.id)}" data-work-step="${step}">
+    <span class="pager-arrow" aria-hidden="true">${icon(step < 0 ? 'chevron-left' : 'chevron-right')}</span>
+    <span class="thumb">${coverImg(work)}</span>
+    <span class="row-text"><small>${label}</small><strong>${esc(work.title)}</strong></span>
+  </a>`;
+}
+
+/**
+ * A full page for one record.
+ * @param {object} ctx { prev, next, pos, total, backLabel } — neighbours in the archive order
+ */
+export function renderWorkPage(work, { prev = null, next = null, pos = 0, total = 0, backLabel = '档案' } = {}) {
+  const nav = `<nav class="work-nav" aria-label="作品导航">
+    <button type="button" class="work-back" data-action="back" title="返回（Esc）">${icon('chevron-left')}<span>返回${esc(backLabel)}</span></button>
+    <div class="work-tools">
+      ${pos ? `<span class="work-pos">${pos} / ${total}</span>` : ''}
+      <button type="button" class="icon-btn" data-action="prev" aria-label="上一部（←）" title="上一部（←）"${prev ? '' : ' disabled'}>${icon('chevron-left')}</button>
+      <button type="button" class="icon-btn" data-action="next" aria-label="下一部（→）" title="下一部（→）"${next ? '' : ' disabled'}>${icon('chevron-right')}</button>
+      <span class="work-tools-sep" aria-hidden="true"></span>
+      <button type="button" class="icon-btn" data-action="copy" aria-label="复制这条记录的链接" title="复制链接">${icon('link')}</button>
+      <button type="button" class="icon-btn" data-action="edit" aria-label="编辑这条记录" title="编辑">${icon('pencil')}</button>
+    </div>
+  </nav>`;
+  const pager = prev || next
+    ? `<nav class="work-pager" aria-label="上一部与下一部">${pagerCard(prev, -1)}${pagerCard(next, 1)}</nav>`
+    : '';
+  return `${nav}${renderDetail(work)}${pager}`;
+}
+
+function renderDetail(work) {
   const kicker = [categoryFullLabel(work), work.releaseYear].filter(Boolean).join(' · ');
   const creator = [work.creator, work.platform].filter(Boolean).join(' · ');
   const verb = verbOf(work.category);
@@ -207,12 +239,11 @@ export function renderDetail(work) {
   const updated = work.updatedAt ? `更新于 ${esc(formatDate(work.updatedAt))}` : '';
 
   return `<article class="detail">
-    <div class="detail-wash" aria-hidden="true"><img src="${esc(coverSrc(work))}" alt="" referrerpolicy="no-referrer"></div>
     <div class="detail-hero">
       <div class="detail-cover cover-wrap">${glowImg(work)}<div class="cover">${coverImg(work, { eager: true })}</div></div>
       <div class="detail-head">
         <p class="detail-kicker">${esc(kicker)}</p>
-        <h2 class="detail-title" id="detail-title">${esc(work.title)}</h2>
+        <h1 class="detail-title" id="detail-title">${esc(work.title)}</h1>
         ${work.originalTitle ? `<p class="detail-orig" lang="ja">${esc(work.originalTitle)}</p>` : ''}
         ${creator ? `<p class="detail-creator">${esc(creator)}</p>` : ''}
         <div class="detail-rating">${score}${hof}</div>

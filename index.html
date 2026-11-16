@@ -22,25 +22,25 @@
     Cache busting: GitHub Pages lets browsers reuse files for 10 minutes, so after
     changing any CSS/JS file bump every "v=" below (stylesheets, import map, entry).
   -->
-  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116c">
-  <link rel="stylesheet" href="styles/components.css?v=20261116c">
+  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116d">
+  <link rel="stylesheet" href="styles/components.css?v=20261116d">
   <script type="importmap">
     {
       "imports": {
-        "./js/app.js": "./js/app.js?v=20261116c",
-        "./js/charts.js": "./js/charts.js?v=20261116c",
-        "./js/editor.js": "./js/editor.js?v=20261116c",
-        "./js/icons.js": "./js/icons.js?v=20261116c",
-        "./js/markdown.js": "./js/markdown.js?v=20261116c",
-        "./js/meta.js": "./js/meta.js?v=20261116c",
-        "./js/search-api.js": "./js/search-api.js?v=20261116c",
-        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116c",
-        "./js/sync.js": "./js/sync.js?v=20261116c",
-        "./js/views.js": "./js/views.js?v=20261116c"
+        "./js/app.js": "./js/app.js?v=20261116d",
+        "./js/charts.js": "./js/charts.js?v=20261116d",
+        "./js/editor.js": "./js/editor.js?v=20261116d",
+        "./js/icons.js": "./js/icons.js?v=20261116d",
+        "./js/markdown.js": "./js/markdown.js?v=20261116d",
+        "./js/meta.js": "./js/meta.js?v=20261116d",
+        "./js/search-api.js": "./js/search-api.js?v=20261116d",
+        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116d",
+        "./js/sync.js": "./js/sync.js?v=20261116d",
+        "./js/views.js": "./js/views.js?v=20261116d"
       }
     }
   </script>
-  <script type="module" src="js/app.js?v=20261116c"></script>
+  <script type="module" src="js/app.js?v=20261116d"></script>
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">跳到正文</a>
@@ -175,6 +175,11 @@
         <div id="stats-body"></div>
       </div>
     </section>
+
+    <!-- Work: one full page per record (#/w/<id>) -->
+    <section class="page page-work" id="page-work" aria-labelledby="detail-title" hidden>
+      <div class="container" id="work-body"></div>
+    </section>
   </main>
 
   <footer class="site-footer">
@@ -184,22 +189,6 @@
     </div>
   </footer>
 
-  <!-- Work detail -->
-  <dialog class="modal modal-detail" id="detail-dialog" aria-labelledby="detail-title">
-    <div class="modal-bar">
-      <div class="modal-bar-group">
-        <button type="button" class="icon-btn" id="detail-prev" aria-label="上一部（←）" title="上一部（←）"><span data-icon="chevron-left"></span></button>
-        <button type="button" class="icon-btn" id="detail-next" aria-label="下一部（→）" title="下一部（→）"><span data-icon="chevron-right"></span></button>
-        <span class="modal-pos" id="detail-pos"></span>
-      </div>
-      <div class="modal-bar-group">
-        <button type="button" class="icon-btn" id="detail-copy" aria-label="复制这条记录的链接" title="复制链接"><span data-icon="link"></span></button>
-        <button type="button" class="icon-btn" id="detail-edit" aria-label="编辑这条记录" title="编辑"><span data-icon="pencil"></span></button>
-        <button type="button" class="icon-btn" data-close aria-label="关闭" title="关闭（Esc）"><span data-icon="x"></span></button>
-      </div>
-    </div>
-    <div class="modal-scroll" id="detail-body"></div>
-  </dialog>
 
   <!-- Editor -->
   <dialog class="modal modal-editor" id="editor-dialog" aria-labelledby="editor-title">
