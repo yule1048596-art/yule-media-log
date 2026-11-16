@@ -176,6 +176,8 @@ legend { padding: 0; }
 
 .muted { color: var(--ink-3); }
 
+.svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
 /* Icons */
 .ico {
   width: 18px;

@@ -23,6 +23,9 @@ function scoreHtml(work) {
 
 // ---------- Wall ----------
 
+// A bookmark ribbon hanging from the cover's top edge; the gold gradient is defined once in index.html.
+const COVER_RIBBON = '<svg viewBox="0 0 16 24" aria-hidden="true" focusable="false"><path d="M0 0h16v24l-8-5.5L0 24Z"/><path class="ribbon-shine" d="M3 0v17.6"/></svg>';
+
 function cardHtml(work, index) {
   const status = work.status !== 'completed'
     ? `<span class="cover-badge">${esc(statusLabel(work.status, work.category))}</span>` : '';
@@ -30,13 +33,13 @@ function cardHtml(work, index) {
   const progress = work.status === 'watching' && pct !== null
     ? `<span class="cover-progress" style="--p:${pct}%"></span>` : '';
   const ribbon = work.hallOfFame
-    ? `<span class="cover-ribbon" title="殿堂">${icon('ribbon')}</span>` : '';
+    ? `<span class="cover-ribbon" title="殿堂">${COVER_RIBBON}</span>` : '';
   const quote = work.oneLiner
     ? `<span class="cover-quote" aria-hidden="true">${esc(work.oneLiner)}</span>` : '';
   const meta = [categoryLabel(work), work.releaseYear].filter(Boolean).join(' · ');
   const hof = work.hallOfFame ? '<span class="visually-hidden">，殿堂作品</span>' : '';
 
-  return `<li class="card">
+  return `<li class="card" style="--i:${Math.min(index, 24)}">
     <a class="card-link" href="${workHref(work.id)}" data-work-link="${esc(work.id)}">
       <div class="cover">${coverImg(work, { eager: index < 12 })}${ribbon}${status}${progress}${quote}</div>
       <div class="card-text">
@@ -93,15 +96,17 @@ export function renderList(items, sort) {
 
 // ---------- Diary ----------
 
-function diaryEntry(w, dayText) {
+/** One diary line. The month is printed only on the first entry of each month. */
+function diaryRow(w, { month = '', day = '', note = '' }) {
   const ribbon = w.hallOfFame ? `<span class="hof-ico" title="殿堂">${icon('ribbon')}</span>` : '';
-  const sub = [categoryFullLabel(w), w.status !== 'completed' ? statusLabel(w.status, w.category) : '']
-    .filter(Boolean).join(' · ');
-  return `<li class="diary-entry">
+  const date = note
+    ? `<span class="diary-date"><span class="diary-note">${esc(note)}</span></span>`
+    : `<span class="diary-date"><span class="diary-month">${esc(month)}</span><span class="diary-day">${esc(day)}</span></span>`;
+  return `<li class="diary-row${month ? ' is-month-start' : ''}">
     <a href="${workHref(w.id)}" data-work-link="${esc(w.id)}">
-      <span class="diary-day">${esc(dayText)}</span>
+      ${date}
       <span class="thumb">${coverImg(w)}</span>
-      <span class="diary-main"><strong>${esc(w.title)}</strong><small>${esc(sub)}</small></span>
+      <span class="diary-main"><strong>${esc(w.title)}</strong><small>${esc(categoryFullLabel(w))}</small></span>
       <span class="diary-score">${ribbon}${scoreHtml(w)}</span>
     </a>
   </li>`;
@@ -125,34 +130,34 @@ export function diaryOrder(items) {
 
 export function renderDiary(items) {
   const { dated, undated } = splitDiary(items);
+  const blocks = [];
+
+  if (undated.length) {
+    const title = undated.every((w) => w.status !== 'completed') ? '还没看完' : '未记日期';
+    const rows = undated.map((w) => diaryRow(w, { note: statusLabel(w.status, w.category) })).join('');
+    blocks.push(`<section class="diary-year">
+      <div class="diary-head"><h2>${title}</h2><span>${undated.length} 部</span></div>
+      <ol class="diary-list">${rows}</ol>
+    </section>`);
+  }
 
   const years = new Map();
   for (const w of dated) {
     const y = yearOf(w.completedAt);
-    const m = Number(w.completedAt.slice(5, 7));
-    if (!years.has(y)) years.set(y, new Map());
-    const months = years.get(y);
-    if (!months.has(m)) months.set(m, []);
-    months.get(m).push(w);
+    if (!years.has(y)) years.set(y, []);
+    years.get(y).push(w);
   }
-
-  const blocks = [];
-  if (undated.length) {
-    const rows = undated.map((w) => diaryEntry(w, '')).join('');
-    blocks.push(`<section class="diary-year">
-      <div class="diary-head"><h2>还没看完</h2><span>${undated.length} 部</span></div>
-      <div class="diary-month"><h3>待续</h3><ol class="diary-entries">${rows}</ol></div>
-    </section>`);
-  }
-  for (const [year, months] of years) {
-    const count = [...months.values()].reduce((n, list) => n + list.length, 0);
-    const monthBlocks = [...months.entries()].map(([m, list]) => {
-      const rows = list.map((w) => diaryEntry(w, String(Number(w.completedAt.slice(8, 10))))).join('');
-      return `<div class="diary-month"><h3>${m} 月</h3><ol class="diary-entries">${rows}</ol></div>`;
+  for (const [year, list] of years) {
+    let lastMonth = '';
+    const rows = list.map((w) => {
+      const month = String(Number(w.completedAt.slice(5, 7)));
+      const first = month !== lastMonth;
+      lastMonth = month;
+      return diaryRow(w, { month: first ? `${month} 月` : '', day: String(Number(w.completedAt.slice(8, 10))) });
     }).join('');
     blocks.push(`<section class="diary-year">
-      <div class="diary-head"><h2>${esc(year)}</h2><span>${count} 部</span></div>
-      ${monthBlocks}
+      <div class="diary-head"><h2>${esc(year)}</h2><span>${list.length} 部</span></div>
+      <ol class="diary-list">${rows}</ol>
     </section>`);
   }
   return `<div class="diary">${blocks.join('')}</div>`;

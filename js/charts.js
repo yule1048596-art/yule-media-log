@@ -204,8 +204,29 @@ export function renderStats(works, year) {
     ? `<div class="tagcloud">${tags.map(([t, n]) => `<button type="button" class="tag" data-tag="${esc(t)}" aria-label="${esc(`标签 ${t}：${n} 部，在档案中查看`)}">#${esc(t)}<b>${n}</b></button>`).join('')}</div>`
     : '<p class="panel-empty">还没有标签</p>';
 
+  // ----- Shelf: every finished work as a cover, newest first -----
+  const finished = (all ? works.filter((w) => finishedYear(w)) : scoped)
+    .slice()
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  const shelves = new Map();
+  for (const w of finished) {
+    const key = all ? finishedYear(w) : `${Number(w.completedAt.slice(5, 7))} 月`;
+    if (!shelves.has(key)) shelves.set(key, []);
+    shelves.get(key).push(w);
+  }
+  const shelfBody = shelves.size
+    ? `<div class="shelf">${[...shelves].map(([key, list]) => `<div class="shelf-row">
+        <div class="shelf-label"><strong>${esc(key)}</strong><span>${list.length} 部</span></div>
+        <ul class="shelf-covers">${list.map((w) => `<li><a href="${workHref(w.id)}" data-work-link="${esc(w.id)}" title="${esc(w.title)}">
+          <span class="cover"><img src="${esc(coverSrc(w))}" alt="${esc(w.title)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-cover-id="${esc(w.id)}"></span>
+        </a></li>`).join('')}</ul>
+      </div>`).join('')}</div>`
+    : '<p class="panel-empty">还没有填写看完日期的作品</p>';
+  const shelfSub = all ? '每一部看完的作品，按年份排列，最近的在前' : `${year} 年看完的作品，按月份排列`;
+
   return `<div class="kpis">${kpis.join('')}</div>
     <div class="stats-grid">
+      ${panel('书架', shelfSub, shelfBody, { wide: true })}
       ${panel('分类', '按数量排序 · 点击在档案中查看', `<ul class="hbars">${catRows}</ul>${catTable}`)}
       ${panel('评分分布', scored.length ? `${scored.length} 部有评分` : '', scoreBody)}
       ${panel(timeTitle, timeSub, timeBody, { wide: true })}

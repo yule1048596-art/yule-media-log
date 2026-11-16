@@ -243,6 +243,32 @@ function renderArchive() {
   if (state.view === 'list') els.archiveView.innerHTML = renderList(items, state.sort);
   else if (state.view === 'diary') els.archiveView.innerHTML = renderDiary(items);
   else els.archiveView.innerHTML = renderWall(items);
+  primeImages(els.archiveView);
+}
+
+/** Placeholder wall shown while works.json is loading. */
+function renderSkeleton() {
+  const card = '<li class="card"><div class="cover is-skeleton"></div><div class="sk-line"></div><div class="sk-line is-short"></div></li>';
+  els.archiveView.innerHTML = `<ul class="wall" aria-hidden="true">${card.repeat(14)}</ul>`;
+}
+
+/** Covers that are still downloading fade in once they arrive (see the load listener). */
+function primeImages(root) {
+  for (const img of root.querySelectorAll('img')) {
+    if (!img.complete) img.classList.add('is-pending');
+  }
+}
+
+/** Restart a one-shot CSS animation class on an element. */
+const playTimers = new WeakMap();
+function play(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  const timers = playTimers.get(el) || {};
+  clearTimeout(timers[cls]);
+  timers[cls] = setTimeout(() => el.classList.remove(cls), 1200);
+  playTimers.set(el, timers);
 }
 
 // ---------- Stats ----------
@@ -256,6 +282,7 @@ function renderStatsPage() {
   ).join('');
   els.statsSub.textContent = statsSubtitle(works, state.statsYear);
   els.statsBody.innerHTML = renderStats(works, state.statsYear);
+  primeImages(els.statsBody);
 }
 
 // ---------- Shell ----------
@@ -284,9 +311,11 @@ function renderAll() {
 }
 
 function showPage(page) {
+  const changed = state.page !== page;
   state.page = page;
   els.pageArchive.hidden = page !== 'archive';
   els.pageStats.hidden = page !== 'stats';
+  if (changed) play(page === 'stats' ? els.pageStats : els.pageArchive, 'is-switching');
   for (const a of document.querySelectorAll('[data-nav]')) {
     if (a.dataset.nav === page) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -302,6 +331,7 @@ function renderDetailInto(id) {
   const work = findWork(id);
   if (!work) return;
   els.detailBody.innerHTML = renderDetail(work);
+  primeImages(els.detailBody);
   const ids = orderedIds();
   const i = ids.indexOf(id);
   els.detailPrev.disabled = i <= 0;
@@ -460,9 +490,11 @@ function setupEvents() {
   els.viewSwitch.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-view]');
     if (!btn || !VIEWS.includes(btn.dataset.view)) return;
+    if (btn.dataset.view === state.view) return;
     state.view = btn.dataset.view;
     writePref(VIEW_KEY, state.view);
     renderArchive();
+    play(els.archiveView, 'is-switching');
   });
 
   // Clear buttons live in the result bar and in the empty state.
@@ -553,13 +585,27 @@ function setupEvents() {
     if (state.detailId !== null) leaveDetailRoute();
   });
 
+  // Covers fade in when they arrive instead of popping in.
+  document.addEventListener('load', (e) => {
+    if (e.target instanceof HTMLImageElement) e.target.classList.remove('is-pending');
+  }, true);
+
+  // The top bar gets its hairline only once the page has scrolled under it.
+  const topbar = document.querySelector('.topbar');
+  const syncTopbar = () => topbar.classList.toggle('is-scrolled', window.scrollY > 2);
+  window.addEventListener('scroll', syncTopbar, { passive: true });
+  syncTopbar();
+
   // Cover images that fail to load fall back to a generated cover.
   document.addEventListener('error', (e) => {
     const img = e.target;
     if (!(img instanceof HTMLImageElement)) return;
     if (img.closest('.detail-wash')) { img.remove(); return; }
     const id = img.dataset.coverId;
-    if (!id || img.dataset.fallback) return;
+    if (!id || img.dataset.fallback) {
+      img.classList.remove('is-pending');
+      return;
+    }
     img.dataset.fallback = '1';
     img.src = fallbackCover(findWork(id) || { title: '', category: 'novel' });
   }, true);
@@ -649,6 +695,7 @@ async function init() {
     toast
   });
 
+  if (!parseHash().page || parseHash().page === 'archive') renderSkeleton();
   const { data, isDirty, pending, remoteOk, baseSha, conflict } = await loadInitialData();
   state.data = data;
   state.dirty = isDirty;
@@ -659,6 +706,7 @@ async function init() {
   updateSyncDot();
   renderFooter();
   applyRoute({ initial: true });
+  if (state.page === 'archive' && state.view === 'wall') play(els.archiveView, 'is-entering');
   if (!state.ready) toast('没能读取 data/works.json', 'error');
   else if (conflict) toast('线上数据在你上次编辑后有更新，详情见「数据与同步」', 'error');
 }
