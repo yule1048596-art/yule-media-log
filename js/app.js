@@ -460,16 +460,27 @@ function unlockScroll() {
  * Scrolling is locked until the transition has finished.
  * Falls back to an instant change without View Transitions or with reduced motion.
  */
-function morph(update, { from = null, findTo = null } = {}) {
+let morphSeq = 0;
+
+function morph(update, { from = null, findTo = null, mode = '' } = {}) {
   if (!canMorph()) return Promise.resolve(update());
+  const seq = ++morphSeq;
+  const root = document.documentElement;
   lockScroll();
   transitioning = true;
-  const card = from?.closest('.card') || null;
-  card?.classList.add('is-launching');
+  // 'step' (prev / next): the cover crossfades in place and the text slides (see components.css)
+  if (mode) root.dataset.vt = mode;
+  else delete root.dataset.vt;
+  // The clicked cover keeps its hover look in the snapshot; it fades out while the cover flies.
   if (from) from.style.viewTransitionName = VT_COVER;
   let to = null;
   const vt = document.startViewTransition(async () => {
     if (from) from.style.viewTransitionName = '';
+    // The old view is captured by now, so the new view's elements can take their incoming names.
+    if (mode) root.dataset.vt = `${mode}-in`;
+    // The new view holds still while it animates: the top bar takes its colours at once,
+    // and the cover glow and ambient field settle in after landing.
+    root.classList.add('is-morphing');
     await update();
     to = findTo ? findTo() : null;
     if (to && !inViewport(to)) to = null;
@@ -486,9 +497,13 @@ function morph(update, { from = null, findTo = null } = {}) {
   return vt.finished.catch(() => {}).finally(() => {
     clearTimeout(stall);
     clearTimeout(guard);
-    transitioning = false;
-    card?.classList.remove('is-launching');
     if (to) to.style.viewTransitionName = '';
+    // A newer transition that interrupted this one owns the page state now.
+    if (seq === morphSeq) {
+      transitioning = false;
+      root.classList.remove('is-morphing');
+      delete root.dataset.vt;
+    }
     unlockScroll();
   });
 }
@@ -557,14 +572,17 @@ function knownPalette(work) {
 }
 
 /** Sample covers in spare time (the work page's neighbours), so ←/→ lands on an already coloured page. */
-function warmPalettes(works) {
-  if (navigator.connection?.saveData) return;
+function warmPalettes(works, { now = false } = {}) {
   const urls = works.filter((w) => w && !knownPalette(w)).map((w) => w.coverUrl.trim());
   if (!urls.length) return;
+  const run = () => urls.forEach((url) => extractPalette(url));
+  // A work the reader is reaching for is sampled right away (its cover is already on screen).
+  if (now) return run();
+  if (navigator.connection?.saveData) return;
   const later = window.requestIdleCallback
     ? (fn) => window.requestIdleCallback(fn, { timeout: 1500 })
     : (fn) => setTimeout(fn, 300);
-  later(() => urls.forEach((url) => extractPalette(url)));
+  later(run);
 }
 
 /** Colours for a work, waiting at most `wait` ms for its cover to be sampled. */
@@ -626,13 +644,17 @@ function stepWork(delta) {
   if (i === -1 || !next) return;
   // Replace, so "返回" still leads to the list rather than through every neighbour.
   // (The neighbours' colours were sampled when this page rendered, so there is nothing to wait for.)
-  morph(() => {
+  // The page slides a little in the direction of travel (see the "step" rules in components.css).
+  document.documentElement.style.setProperty('--vt-dir', delta > 0 ? '1' : '-1');
+  morph(async () => {
     setHash(workHref(next));
     state.workId = next;
     renderWorkInto(next);
     renderAmbient();
     window.scrollTo(0, 0);
-  }, { findTo: detailCover });
+    // Capture the new page with its cover drawn, not halfway through loading
+    await imageReady(detailCover()?.querySelector('img'));
+  }, { mode: 'step' });
 }
 
 /** Back to wherever the work page was opened from; the cover flies back into the list. */
@@ -830,6 +852,16 @@ function setupEvents() {
       els.archiveView.querySelector(`[data-sort-key="${key}"]`)?.focus();
     }
   });
+
+  // Sample a work's cover colours as soon as the reader reaches for it (hover, touch, focus),
+  // so a click can start the cover transition at once instead of waiting for them.
+  const warmLink = (e) => {
+    const link = e.target.closest?.('a[data-work-link]');
+    if (link) warmPalettes([findWork(link.dataset.workLink)], { now: true });
+  };
+  document.addEventListener('pointerover', warmLink, { passive: true });
+  document.addEventListener('pointerdown', warmLink, { passive: true });
+  document.addEventListener('focusin', warmLink);
 
   // In-app links to a work open it with the cover transition (new-tab clicks stay normal).
   document.addEventListener('click', (e) => {

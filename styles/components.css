@@ -1758,17 +1758,48 @@ main { position: relative; isolation: isolate; }
       1.009 78.6%, 1.008 82.1%, 1.007 85.7%, 1.006 89.3%, 1.004 92.9%, 1.003 96.4%, 1);
   }
 }
-/* Both ends show the same artwork: a quick crossfade hides badges and size differences */
+/* Both ends show the same artwork: a quick crossfade hides the hover look, badges and size
+   differences. Old and new share one duration, so the cover never turns see-through mid-way. */
 ::view-transition-old(work-cover),
 ::view-transition-new(work-cover) {
   height: 100%;
   object-fit: cover;
-  animation-duration: 0.3s;
+  animation-duration: 0.26s;
 }
 
-/* The page around the cover crossfades; the title block rises in as the cover lands */
-::view-transition-old(root) { animation-duration: 0.24s; }
-::view-transition-new(root) { animation-duration: 0.42s; }
+/* The page around the cover crossfades; the title block rises in as the cover lands.
+   Equal durations keep the two pages adding up to a solid frame (no see-through dip). */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 0.3s; }
+
+/* Prev / next: the cover crossfades in place, while the title block and the reading area slide a
+   little in the direction of travel and fade through (the outgoing text has nearly gone before the
+   incoming text shows), so two titles never sit on top of each other. The header colour crossfades
+   behind them. data-vt is "step" while the old page is captured and "step-in" for the new one. */
+html[data-vt="step"] .page-work .detail-head { view-transition-name: step-head-out; }
+html[data-vt="step"] .page-work .work-main { view-transition-name: step-body-out; }
+html[data-vt="step-in"] .page-work .detail-head { view-transition-name: step-head-in; }
+html[data-vt="step-in"] .page-work .work-main { view-transition-name: step-body-in; }
+::view-transition-old(step-head-out),
+::view-transition-old(step-body-out) { animation: vt-step-out 0.12s cubic-bezier(0.2, 0, 0, 1) both; }
+::view-transition-new(step-head-in),
+::view-transition-new(step-body-in) { animation: vt-step-in 0.3s cubic-bezier(0, 0, 0.2, 1) 0.06s both; }
+@keyframes vt-step-out { to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -24px)); } }
+@keyframes vt-step-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 24px)); } }
+
+/* While a transition runs (after the old view is captured), the new view holds still: the top bar
+   takes its colours at once and skips its frosted glass; the cover glow and the ambient colour
+   field wait and bloom in once the cover has landed. This also keeps every frame light to draw. */
+html.is-morphing .topbar,
+html.is-morphing .topbar *,
+html.is-morphing .cover img,
+html.is-morphing .thumb img { transition: none !important; }
+html.is-morphing .topbar { -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.is-morphing .detail-cover .cover-glow,
+html.is-morphing .ambient { opacity: 0; }
+.ambient { transition: opacity 0.6s var(--ease); }
+/* On a work page with a coloured header the ambient field is fully covered: do not draw it at all */
+main:has(> #page-work:not([hidden]) .work-band[data-tone]) > .ambient { display: none; }
 ::view-transition-new(work-head):only-child {
   animation: vt-rise 0.52s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
 }
@@ -1777,12 +1808,6 @@ main { position: relative; isolation: isolate; }
 }
 @keyframes vt-rise { from { opacity: 0; transform: translateY(18px); } }
 @keyframes vt-fade-out { to { opacity: 0; } }
-
-/* The clicked card drops its hover dressing so the snapshot is just the artwork */
-.card.is-launching .cover-quote,
-.card.is-launching .cover-glow { opacity: 0 !important; transition: none !important; }
-.card.is-launching .cover,
-.card.is-launching .cover img { transform: none !important; transition: none !important; }
 
 /* While a cover transition runs, the page does not scroll (see lockScroll in app.js) */
 html.is-scroll-locked { overflow: hidden; overscroll-behavior: none; }
