@@ -187,6 +187,16 @@ export function fallbackCover(work) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+/** Background colour of the generated cover for a category. */
+export function coverTone(category) {
+  return (COVER_TONES[category] || COVER_TONES.novel).bg;
+}
+
+/** True when the work has its own cover image rather than a generated one. */
+export function hasCoverImage(work) {
+  return /^https?:\/\//i.test(String(work?.coverUrl || '').trim());
+}
+
 export function coverSrc(work) {
   const url = String(work?.coverUrl || '').trim();
   return /^https?:\/\//i.test(url) ? url : fallbackCover(work);

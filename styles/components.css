@@ -1787,3 +1787,64 @@ main { position: relative; isolation: isolate; }
 /* While a cover transition runs, the page does not scroll (see lockScroll in app.js) */
 html.is-scroll-locked { overflow: hidden; overscroll-behavior: none; }
 html.is-scroll-locked body { touch-action: none; }
+
+/* ==========================================================================
+   Work page header coloured from its cover (palette.js sets the tokens inline)
+   ========================================================================== */
+.work-band {
+  position: relative;
+  isolation: isolate;
+  /* Reach under the translucent top bar so the colour starts at the very top */
+  margin-top: calc(var(--topbar-h) * -1);
+  padding-top: var(--topbar-h);
+  padding-bottom: 104px;
+  color: var(--ink);
+}
+.work-band[data-tone]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(70% 85% at 16% 6%, color-mix(in srgb, var(--band-glow) 80%, transparent), transparent 70%),
+    linear-gradient(to bottom, var(--bg) 0%, var(--bg) calc(100% - 128px), var(--page-bg) 100%);
+}
+/* Accent-coloured "back" pill and cover-tinted tags, like Apple Music's coloured buttons */
+.work-band[data-tone] .work-back {
+  border-color: transparent;
+  background: var(--band-accent);
+  color: var(--band-on-accent);
+}
+.work-band[data-tone] .work-back:hover { background: var(--band-accent); color: var(--band-on-accent); filter: brightness(1.08); }
+.work-band[data-tone] .tag { background: var(--band-tag); color: var(--ink); }
+.work-band[data-tone] .tag:hover { background: var(--band-tag-hover); }
+.work-band[data-tone] .meter { background: color-mix(in srgb, var(--band-accent) 24%, transparent); }
+.work-band[data-tone] .meter span { background: var(--band-accent); }
+.work-band[data-tone] .detail-cover .cover { box-shadow: 0 26px 50px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--ring); }
+.work-band[data-tone="dark"] .hof-badge { background: color-mix(in srgb, var(--gold) 18%, transparent); }
+.work-band .work-main,
+.work-main { position: relative; }
+
+/* Reading area: the cover's accent on the quote mark and links */
+.page-work .detail-quote::before { color: var(--work-accent, var(--ink-3)); }
+.page-work .work-main .prose a { color: var(--work-accent-ink, var(--accent-ink)); }
+.page-work .work-main .detail-quote { margin-top: 8px; }
+
+/* The top bar picks up the header colour smoothly */
+.topbar {
+  /* Re-resolve the text colour here, so the brand name follows the header tokens set on the bar */
+  color: var(--ink);
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.35s, color 0.35s;
+}
+.topbar .nav-link,
+.topbar .icon-btn,
+.topbar .brand-name small { transition: background-color 0.15s, color 0.35s; }
+
+@media (max-width: 760px) {
+  .work-band { padding-bottom: 76px; }
+  .work-band[data-tone]::before {
+    background:
+      radial-gradient(90% 70% at 20% 4%, color-mix(in srgb, var(--band-glow) 80%, transparent), transparent 70%),
+      linear-gradient(to bottom, var(--bg) 0%, var(--bg) calc(100% - 96px), var(--page-bg) 100%);
+  }
+}

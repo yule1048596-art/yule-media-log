@@ -22,25 +22,26 @@
     Cache busting: GitHub Pages lets browsers reuse files for 10 minutes, so after
     changing any CSS/JS file bump every "v=" below (stylesheets, import map, entry).
   -->
-  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116f">
-  <link rel="stylesheet" href="styles/components.css?v=20261116f">
+  <link rel="stylesheet" href="styles/tokens-and-base.css?v=20261116g">
+  <link rel="stylesheet" href="styles/components.css?v=20261116g">
   <script type="importmap">
     {
       "imports": {
-        "./js/app.js": "./js/app.js?v=20261116f",
-        "./js/charts.js": "./js/charts.js?v=20261116f",
-        "./js/editor.js": "./js/editor.js?v=20261116f",
-        "./js/icons.js": "./js/icons.js?v=20261116f",
-        "./js/markdown.js": "./js/markdown.js?v=20261116f",
-        "./js/meta.js": "./js/meta.js?v=20261116f",
-        "./js/search-api.js": "./js/search-api.js?v=20261116f",
-        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116f",
-        "./js/sync.js": "./js/sync.js?v=20261116f",
-        "./js/views.js": "./js/views.js?v=20261116f"
+        "./js/app.js": "./js/app.js?v=20261116g",
+        "./js/charts.js": "./js/charts.js?v=20261116g",
+        "./js/editor.js": "./js/editor.js?v=20261116g",
+        "./js/icons.js": "./js/icons.js?v=20261116g",
+        "./js/markdown.js": "./js/markdown.js?v=20261116g",
+        "./js/meta.js": "./js/meta.js?v=20261116g",
+        "./js/palette.js": "./js/palette.js?v=20261116g",
+        "./js/search-api.js": "./js/search-api.js?v=20261116g",
+        "./js/sync-ui.js": "./js/sync-ui.js?v=20261116g",
+        "./js/sync.js": "./js/sync.js?v=20261116g",
+        "./js/views.js": "./js/views.js?v=20261116g"
       }
     }
   </script>
-  <script type="module" src="js/app.js?v=20261116f"></script>
+  <script type="module" src="js/app.js?v=20261116g"></script>
 </head>
 <body>
   <a class="skip-link" href="#main" id="skip-link">跳到正文</a>
@@ -178,7 +179,7 @@
 
     <!-- Work: one full page per record (#/w/<id>) -->
     <section class="page page-work" id="page-work" aria-labelledby="detail-title" hidden>
-      <div class="container" id="work-body"></div>
+      <div id="work-body"></div>
     </section>
   </main>
 

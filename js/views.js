@@ -202,10 +202,16 @@ export function renderWorkPage(work, { prev = null, next = null, pos = 0, total 
   const pager = prev || next
     ? `<nav class="work-pager" aria-label="上一部与下一部">${pagerCard(prev, -1)}${pagerCard(next, 1)}</nav>`
     : '';
-  return `${nav}${renderDetail(work)}${pager}`;
+  const { hero, body } = detailParts(work);
+  // The header band takes its colours from the cover (see palette.js); the body stays in the site theme.
+  return `<article class="detail">
+    <header class="work-band"><div class="container">${nav}${hero}</div></header>
+    <div class="container work-main">${body}${pager}</div>
+  </article>`;
 }
 
-function renderDetail(work) {
+/** The parts of a work page: the header hero and the reading body. */
+function detailParts(work) {
   const kicker = [categoryFullLabel(work), work.releaseYear].filter(Boolean).join(' · ');
   const creator = [work.creator, work.platform].filter(Boolean).join(' · ');
   const verb = verbOf(work.category);
@@ -238,8 +244,8 @@ function renderDetail(work) {
     : (work.oneLiner ? '' : '<div class="detail-review"><p class="prose-empty">还没有写观后感。</p></div>');
   const updated = work.updatedAt ? `更新于 ${esc(formatDate(work.updatedAt))}` : '';
 
-  return `<article class="detail">
-    <div class="detail-hero">
+  return {
+    hero: `<div class="detail-hero">
       <div class="detail-cover cover-wrap">${glowImg(work)}<div class="cover">${coverImg(work, { eager: true })}</div></div>
       <div class="detail-head">
         <p class="detail-kicker">${esc(kicker)}</p>
@@ -250,9 +256,7 @@ function renderDetail(work) {
         <dl class="detail-facts">${facts.join('')}</dl>
         ${tags}
       </div>
-    </div>
-    ${quote}
-    ${reviewHtml}
-    <p class="detail-foot">${updated}</p>
-  </article>`;
+    </div>`,
+    body: `${quote}${reviewHtml}<p class="detail-foot">${updated}</p>`
+  };
 }

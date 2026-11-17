@@ -2,7 +2,8 @@
 
 import { CATEGORIES, NOVEL_SUBTYPES, esc, mean, normalizeText, finishedYear, formatDate } from './meta.js';
 import { icon, hydrateIcons } from './icons.js';
-import { fallbackCover, coverSrc } from './markdown.js';
+import { fallbackCover, coverSrc, coverTone, hasCoverImage } from './markdown.js';
+import { cachedPalette, extractPalette, bandScheme, pageAccent } from './palette.js';
 import { loadInitialData, saveDraft } from './sync.js';
 import { renderWall, renderList, renderDiary, diaryOrder, renderWorkPage, workHref } from './views.js';
 import { renderStats, statsYears, statsSubtitle, bindChartTips } from './charts.js';
@@ -350,6 +351,10 @@ function showPage(page) {
   state.page = page;
   for (const [name, key] of Object.entries(PAGES)) els[key].hidden = name !== page;
   if (from !== page && !transitioning) play(els[PAGES[page]], 'is-switching');
+  if (page !== 'work') {
+    currentBand = null;
+    syncTopbarBand();
+  }
   const navTarget = page === 'stats' ? 'stats' : 'archive';
   for (const a of document.querySelectorAll('[data-nav]')) {
     if (a.dataset.nav === navTarget) a.setAttribute('aria-current', 'page');
@@ -490,14 +495,25 @@ function morph(update, { from = null, findTo = null } = {}) {
 
 const detailCover = () => els.workBody.querySelector('.detail-cover .cover');
 
+let openSeq = 0;
+
 /** Open a work from a link in a list: its cover flies into the work page. */
 function openWork(id, link) {
-  cameFromApp = true;
-  const from = link?.querySelector('.cover, .thumb') || null;
-  morph(() => {
-    setHash(workHref(id), { push: true });
-    applyRoute();
-  }, { from: from && inViewport(from) ? from : null, findTo: detailCover });
+  const seq = ++openSeq;
+  const at = location.hash;
+  // Sample the cover before the transition starts (a few ms for a cached image, capped), so the
+  // new page is captured already coloured. The list stays live meanwhile; a newer click or a
+  // route change in between cancels this one.
+  const ready = canMorph() ? paletteFor(findWork(id)) : Promise.resolve();
+  ready.then(() => {
+    if (seq !== openSeq || location.hash !== at) return;
+    cameFromApp = true;
+    const from = link?.querySelector('.cover, .thumb') || null;
+    morph(() => {
+      setHash(workHref(id), { push: true });
+      applyRoute();
+    }, { from: from && inViewport(from) ? from : null, findTo: detailCover });
+  });
 }
 
 // ---------- Work page ----------
@@ -510,16 +526,97 @@ function renderWorkInto(id) {
   if (!work) return false;
   const ids = orderedIds();
   const i = ids.indexOf(id);
+  const prev = i > 0 ? findWork(ids[i - 1]) : null;
+  const next = i !== -1 && i < ids.length - 1 ? findWork(ids[i + 1]) : null;
   els.workBody.innerHTML = renderWorkPage(work, {
-    prev: i > 0 ? findWork(ids[i - 1]) : null,
-    next: i !== -1 && i < ids.length - 1 ? findWork(ids[i + 1]) : null,
+    prev,
+    next,
     pos: i === -1 ? 0 : i + 1,
     total: ids.length,
     backLabel: returnPage === 'stats' ? '统计' : '档案'
   });
   primeImages(els.workBody);
   document.title = `${work.title} · 余録`;
+  applyBand(work);
+  warmPalettes([prev, next]);
   return true;
+}
+
+// ---------- Cover colours on the work page ----------
+
+let currentBand = null; // { workId, scheme }
+// Cover URLs that failed to load during this visit: their generated cover stands in, and so does its colour.
+const brokenCovers = new Set();
+
+/** Colours already known for a work (instant), or null. Generated covers use their category tone. */
+function knownPalette(work) {
+  if (!work) return null;
+  const url = String(work.coverUrl || '').trim();
+  if (!hasCoverImage(work) || brokenCovers.has(url)) return { dominant: coverTone(work.category), accent: null };
+  return cachedPalette(url);
+}
+
+/** Sample covers in spare time (the work page's neighbours), so ←/→ lands on an already coloured page. */
+function warmPalettes(works) {
+  if (navigator.connection?.saveData) return;
+  const urls = works.filter((w) => w && !knownPalette(w)).map((w) => w.coverUrl.trim());
+  if (!urls.length) return;
+  const later = window.requestIdleCallback
+    ? (fn) => window.requestIdleCallback(fn, { timeout: 1500 })
+    : (fn) => setTimeout(fn, 300);
+  later(() => urls.forEach((url) => extractPalette(url)));
+}
+
+/** Colours for a work, waiting at most `wait` ms for its cover to be sampled. */
+function paletteFor(work, wait = 260) {
+  const known = knownPalette(work);
+  if (known || !work) return Promise.resolve(known);
+  return Promise.race([extractPalette(work.coverUrl.trim()), new Promise((resolve) => setTimeout(() => resolve(null), wait))]);
+}
+
+function paintBand(work, palette) {
+  const band = els.workBody.querySelector('.work-band');
+  if (!band || state.page !== 'work' || state.workId !== work.id) return;
+  const scheme = bandScheme(palette, { dark: document.documentElement.dataset.theme === 'dark' });
+  for (const [key, value] of Object.entries(scheme.vars)) band.style.setProperty(key, value);
+  band.dataset.tone = scheme.tone;
+  // Marks and links in the reading area use the cover's accent, tuned to the page background.
+  const root = getComputedStyle(document.documentElement);
+  const accent = pageAccent(palette, root.getPropertyValue('--page-bg').trim(), root.getPropertyValue('--ink').trim());
+  const main = els.workBody.querySelector('.work-main');
+  main?.style.setProperty('--work-accent', accent.mark);
+  main?.style.setProperty('--work-accent-ink', accent.text);
+  currentBand = { workId: work.id, scheme };
+  syncTopbarBand();
+}
+
+function applyBand(work) {
+  currentBand = null;
+  syncTopbarBand();
+  if (!work) return;
+  const known = knownPalette(work);
+  if (known) {
+    paintBand(work, known);
+    return;
+  }
+  extractPalette(work.coverUrl.trim()).then((palette) => {
+    if (palette) paintBand(work, palette);
+  });
+}
+
+/** While the coloured header sits under the top bar, the bar takes the header's colours. */
+function syncTopbarBand() {
+  const bar = els.topbar;
+  if (!bar) return;
+  const band = currentBand && state.page === 'work' && state.workId === currentBand.workId
+    ? els.workBody.querySelector('.work-band[data-tone]') : null;
+  const under = Boolean(band) && band.getBoundingClientRect().bottom > bar.offsetHeight + 12;
+  const want = under ? currentBand.scheme : null;
+  if (bar.bandScheme === want) return;
+  for (const key of Object.keys(bar.bandScheme?.vars || {})) bar.style.removeProperty(key);
+  bar.bandScheme = want;
+  if (want) for (const [key, value] of Object.entries(want.vars)) bar.style.setProperty(key, value);
+  applyThemeMeta();
 }
 
 function stepWork(delta) {
@@ -528,6 +625,7 @@ function stepWork(delta) {
   const next = ids[i + delta];
   if (i === -1 || !next) return;
   // Replace, so "返回" still leads to the list rather than through every neighbour.
+  // (The neighbours' colours were sampled when this page rendered, so there is nothing to wait for.)
   morph(() => {
     setHash(workHref(next));
     state.workId = next;
@@ -623,7 +721,7 @@ function goToArchive(filters) {
 
 function applyThemeMeta() {
   const dark = document.documentElement.dataset.theme === 'dark';
-  els.themeMeta.content = dark ? '#121211' : '#f6f5f2';
+  els.themeMeta.content = els.topbar?.bandScheme ? els.topbar.bandScheme.bg : (dark ? '#121211' : '#f6f5f2');
   els.btnTheme.setAttribute('aria-label', dark ? '切换到浅色' : '切换到深色');
 }
 
@@ -634,6 +732,7 @@ function setupTheme() {
     document.documentElement.dataset.theme = next;
     writePref(THEME_KEY, next);
     applyThemeMeta();
+    if (state.page === 'work') applyBand(findWork(state.workId));
   });
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', (e) => {
     let stored = null;
@@ -641,6 +740,7 @@ function setupTheme() {
     if (stored) return;
     document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
     applyThemeMeta();
+    if (state.page === 'work') applyBand(findWork(state.workId));
   });
 }
 
@@ -792,7 +892,10 @@ function setupEvents() {
 
   // The top bar gets its hairline only once the page has scrolled under it.
   const topbar = document.querySelector('.topbar');
-  const syncTopbar = () => topbar.classList.toggle('is-scrolled', window.scrollY > 2);
+  const syncTopbar = () => {
+    topbar.classList.toggle('is-scrolled', window.scrollY > 2);
+    syncTopbarBand();
+  };
   window.addEventListener('scroll', syncTopbar, { passive: true });
   syncTopbar();
 
@@ -806,7 +909,13 @@ function setupEvents() {
       return;
     }
     img.dataset.fallback = '1';
-    img.src = fallbackCover(findWork(id) || { title: '', category: 'novel' });
+    const work = findWork(id);
+    img.src = fallbackCover(work || { title: '', category: 'novel' });
+    if (work && hasCoverImage(work)) {
+      // Remembered, so later paints (theme change, re-render, reopening) use the stand-in's colour too.
+      brokenCovers.add(work.coverUrl.trim());
+      if (img.closest('.work-band')) paintBand(work, knownPalette(work));
+    }
   }, true);
 
   // Keyboard shortcuts
@@ -853,6 +962,7 @@ async function init() {
   els.densitySwitch = document.getElementById('density-switch');
   els.filtersTop = document.querySelector('.filters');
   els.themeMeta = document.querySelector('meta[name="theme-color"]');
+  els.topbar = document.querySelector('.topbar');
 
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   state.view = readPref(VIEW_KEY, 'wall', VIEWS);
